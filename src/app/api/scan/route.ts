@@ -772,13 +772,30 @@ export async function GET(request: Request) {
 
         // CSP Check
         if (csp) {
-            const hasUnsafeInline = csp.includes("'unsafe-inline'");
-            const hasUnsafeEval = csp.includes("'unsafe-eval'");
-            const hasWildcard = csp.includes('*');
+            const directives = csp.split(';').map(d => d.trim()).filter(Boolean);
+            let hasUnsafeInlineScript = false;
+            let hasUnsafeEvalScript = false;
+            let hasWildcardScript = false;
 
-            if (hasUnsafeInline || hasUnsafeEval || hasWildcard) {
+            for (const directive of directives) {
+                const parts = directive.split(/\s+/);
+                const name = parts[0]?.toLowerCase();
+                const values = parts.slice(1);
+
+                if (name === 'script-src' || name === 'default-src') {
+                    if (values.includes("'unsafe-inline'")) hasUnsafeInlineScript = true;
+                    if (values.includes("'unsafe-eval'")) hasUnsafeEvalScript = true;
+                    if (values.includes('*') || values.includes('http:') || values.includes('https:')) hasWildcardScript = true;
+                }
+            }
+
+            if (hasUnsafeInlineScript || hasUnsafeEvalScript || hasWildcardScript) {
                 score -= 8;
-                const weakDirectives = [hasUnsafeInline && 'unsafe-inline', hasUnsafeEval && 'unsafe-eval', hasWildcard && 'wildcard (*)'].filter(Boolean).join(', ');
+                const weakDirectives = [
+                    hasUnsafeInlineScript && 'unsafe-inline in script-src/default-src',
+                    hasUnsafeEvalScript && 'unsafe-eval in script-src/default-src',
+                    hasWildcardScript && 'wildcard/scheme in script-src/default-src'
+                ].filter(Boolean).join(', ');
                 checks.push({
                     name: 'Content-Security-Policy (CSP)',
                     status: 'Failed',
