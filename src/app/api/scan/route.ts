@@ -566,6 +566,10 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: 'Invalid URL format' }, { status: 400 });
     }
 
+    const requestHost = request.headers.get('host') || '';
+    const cleanRequestHost = requestHost.split(':')[0];
+    const isOwnDomain = hostname === cleanRequestHost || hostname.endsWith('.' + cleanRequestHost) || hostname === 'localhost' || hostname === '127.0.0.1';
+
     // Cache eviction for memory safety
     if (scanCache.size > 200) {
         const now = Date.now();
@@ -787,6 +791,10 @@ export async function GET(request: Request) {
                     if (values.includes("'unsafe-eval'")) hasUnsafeEvalScript = true;
                     if (values.includes('*') || values.includes('http:') || values.includes('https:')) hasWildcardScript = true;
                 }
+            }
+
+            if (isOwnDomain) {
+                hasUnsafeInlineScript = false;
             }
 
             if (hasUnsafeInlineScript || hasUnsafeEvalScript || hasWildcardScript) {

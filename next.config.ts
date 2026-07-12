@@ -10,7 +10,7 @@ const nextConfig: NextConfig = {
             key: "Content-Security-Policy",
             value: [
               "default-src 'self';",
-              "script-src 'self';",
+              "script-src 'self' 'unsafe-inline';", // Required for Next.js page hydration and click/submit event handlers
               "style-src 'self' 'unsafe-inline';", // Required for Tailwind CSS styling runtime injection
               "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://pathfinder-api-845b.onrender.com;",
               "img-src 'self' data: https:;",
