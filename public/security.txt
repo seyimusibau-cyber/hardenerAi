@@ -1,0 +1,4 @@
+Contact: mailto:security@hardener.ai
+Expires: 2027-07-12T18:00:00.000Z
+Preferred-Languages: en
+Canonical: https://hardener-plus.vercel.app/security.txt

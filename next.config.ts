@@ -10,8 +10,8 @@ const nextConfig: NextConfig = {
             key: "Content-Security-Policy",
             value: [
               "default-src 'self';",
-              "script-src 'self' 'unsafe-inline' 'unsafe-eval';",
-              "style-src 'self' 'unsafe-inline';",
+              "script-src 'self';",
+              "style-src 'self' 'unsafe-inline';", // Required for Tailwind CSS styling runtime injection
               "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://pathfinder-api-845b.onrender.com;",
               "img-src 'self' data: https:;",
               "font-src 'self' data: https:;",

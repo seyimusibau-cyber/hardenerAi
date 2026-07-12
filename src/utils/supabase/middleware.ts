@@ -35,51 +35,27 @@ export async function updateSession(request: NextRequest) {
         data: { user },
     } = await supabase.auth.getUser()
 
-    if (
-        !user &&
-        request.nextUrl.pathname.startsWith('/admin')
-    ) {
-        // no user, potentially respond by redirecting the user to the login page
-        const url = request.nextUrl.clone()
-        url.pathname = '/login'
-        const redirectResponse = NextResponse.redirect(url)
-        supabaseResponse.cookies.getAll().forEach((c) => {
-            redirectResponse.cookies.set(c.name, c.value, {
-                path: c.path,
-                domain: c.domain,
-                maxAge: c.maxAge,
-                secure: c.secure,
-                sameSite: c.sameSite,
-                httpOnly: c.httpOnly,
-                expires: c.expires,
-            })
-        })
-        return redirectResponse
-    }
+    // Check if user is trying to access admin routes
+    if (request.nextUrl.pathname.startsWith('/admin')) {
+        // Redirect to login if no user
+        if (!user) {
+            const url = request.nextUrl.clone()
+            url.pathname = '/login'
+            return NextResponse.redirect(url)
+        }
 
-    if (user && request.nextUrl.pathname.startsWith('/admin')) {
-        const { data: profile } = await supabase
+        // Check if user has admin role
+        const { data: profile, error: profileError } = await supabase
             .from('profiles')
             .select('role')
             .eq('id', user.id)
             .single()
 
-        if (profile?.role !== 'admin') {
+        if (profileError || !profile || profile.role !== 'admin') {
+            // User is not an admin, redirect to home or unauthorized page
             const url = request.nextUrl.clone()
             url.pathname = '/'
-            const redirectResponse = NextResponse.redirect(url)
-            supabaseResponse.cookies.getAll().forEach((c) => {
-                redirectResponse.cookies.set(c.name, c.value, {
-                    path: c.path,
-                    domain: c.domain,
-                    maxAge: c.maxAge,
-                    secure: c.secure,
-                    sameSite: c.sameSite,
-                    httpOnly: c.httpOnly,
-                    expires: c.expires,
-                })
-            })
-            return redirectResponse
+            return NextResponse.redirect(url)
         }
     }
 
