@@ -27,11 +27,22 @@ CREATE TABLE public.profiles (
 
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Users view own profile" ON public.profiles FOR
-SELECT USING (auth.uid () = id);
+-- Recursion-free helper function to check admin roles without triggering infinite loop in policies
+CREATE OR REPLACE FUNCTION public.check_user_is_admin(user_id uuid)
+RETURNS boolean SECURITY DEFINER AS $$
+DECLARE
+  is_admin_flag boolean;
+BEGIN
+  SELECT (role = 'admin') INTO is_admin_flag FROM public.profiles WHERE id = user_id;
+  RETURN COALESCE(is_admin_flag, false);
+END;
+$$ LANGUAGE plpgsql;
 
-CREATE POLICY "Users update own profile" ON public.profiles FOR
-UPDATE USING (auth.uid () = id);
+CREATE POLICY "Users view own profile or admins view all" ON public.profiles FOR
+SELECT USING (auth.uid () = id OR public.check_user_is_admin(auth.uid()));
+
+CREATE POLICY "Users update own profile or admins update all" ON public.profiles FOR
+UPDATE USING (auth.uid () = id OR public.check_user_is_admin(auth.uid()));
 
 -- 2. Scans Table
 CREATE TABLE public.scans (
@@ -57,8 +68,8 @@ CREATE TABLE public.scans (
 
 ALTER TABLE public.scans ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Users view own scans" ON public.scans FOR
-SELECT USING (auth.uid () = user_id);
+CREATE POLICY "Users view own scans or admins view all" ON public.scans FOR
+SELECT USING (auth.uid () = user_id OR public.check_user_is_admin(auth.uid()));
 
 CREATE POLICY "Users insert own scans" ON public.scans FOR
 INSERT
