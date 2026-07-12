@@ -1,26 +1,13 @@
-"use client";
-
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { createClient } from "@/utils/supabase/client";
+import { AdminSignOutButton } from "@/components/AdminSignOutButton";
+
+export const dynamic = "force-dynamic";
 
 export default function AdminLayout({
     children,
 }: {
     children: React.ReactNode;
 }) {
-    const router = useRouter();
-    const supabase = createClient();
-
-    const handleSignOut = async () => {
-        try {
-            await supabase.auth.signOut();
-            router.push("/");
-        } catch (err) {
-            console.error("Admin signout failed:", err);
-        }
-    };
-
     return (
         <div className="flex h-screen bg-[#020617] text-slate-200 font-sans">
             {/* Sidebar */}
@@ -66,13 +53,7 @@ export default function AdminLayout({
                             <p className="text-xs text-slate-500">Super Admin</p>
                         </div>
                     </div>
-                    <button 
-                        onClick={handleSignOut}
-                        className="text-slate-500 hover:text-red-405 p-1.5 rounded-lg hover:bg-slate-900 transition-colors cursor-pointer"
-                        title="Sign Out"
-                    >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" x2="9" y1="12" y2="12" /></svg>
-                    </button>
+                    <AdminSignOutButton variant="icon" />
                 </div>
             </aside>
 
@@ -82,12 +63,7 @@ export default function AdminLayout({
                 <header className="h-16 flex items-center justify-between px-6 bg-slate-950/50 border-b border-slate-800 shrink-0">
                     <div className="flex-1" />
                     <div className="flex items-center gap-4">
-                        <button 
-                            onClick={handleSignOut}
-                            className="px-3 py-1.5 text-xs text-slate-400 border border-slate-800 rounded-lg hover:text-red-400 hover:border-red-500/25 transition-colors cursor-pointer"
-                        >
-                            Sign Out
-                        </button>
+                        <AdminSignOutButton variant="text" />
                     </div>
                 </header>
 
