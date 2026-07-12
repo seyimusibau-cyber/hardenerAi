@@ -4,6 +4,11 @@ import "./globals.css";
 export const metadata: Metadata = {
     title: "Hardener Plus | Advanced Security for Modern Developers",
     description: "Clean architecture for the modern era. We use advanced static analysis and dynamic profiling to audit, verify, and harden your codebase against production-grade threats.",
+    icons: {
+        icon: "/logo.png",
+        shortcut: "/logo.png",
+        apple: "/logo.png",
+    }
 };
 
 export default function RootLayout({
