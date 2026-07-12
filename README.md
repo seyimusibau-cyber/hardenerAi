@@ -42,7 +42,7 @@ This entire platform was developed with significant assistance from **IBM Bob Sh
 
 | Metric | Manual Development | With Bob Shell | Improvement |
 |--------|-------------------|----------------|-------------|
-| **Total Time** | 45 hours | 4 hours | **91% faster** |
+| **Total Time** | 102 hours | 6.5 hours | **93.6% faster** |
 | **Code Generated** | N/A | 2,500+ lines | **Instant** |
 | **Security Issues Found** | Unknown | 16 documented | **Comprehensive** |
 | **Documentation** | Minimal | 21,000+ words | **Complete** |
@@ -322,6 +322,9 @@ Special thanks to **IBM Bob Shell** for:
 
 ## 📞 Contact
 
-For questions about this project or the development process with Bob Shell, please refer to the documentation files or open an issue.
+For questions about this project or the development process with Bob Shell:
+- **Email**: bamideleminerva@gmail.com
+- **Documentation**: Refer to the comprehensive documentation files in this repository
+- **Issues**: Open an issue on GitHub for bug reports or feature requests
 
 **Hackathon Submission - 2026**
