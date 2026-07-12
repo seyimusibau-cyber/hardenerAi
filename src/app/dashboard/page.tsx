@@ -36,6 +36,7 @@ interface ScanRecord {
     error_message: string | null;
     score: number | null;
     grade: string | null;
+    checks: ScanCheck[] | null;
     created_at: string;
 }
 
@@ -138,6 +139,7 @@ export default function UserDashboard() {
     const [isLoading, setIsLoading] = useState(true);
     const [profile, setProfile] = useState<UserProfile | null>(null);
     const [scans, setScans] = useState<ScanRecord[]>([]);
+    const [selectedHistoryScan, setSelectedHistoryScan] = useState<ScanRecord | null>(null);
     
     // Scanner State
     const [url, setUrl] = useState("");
@@ -263,7 +265,8 @@ export default function UserDashboard() {
                         vulns_found: failedCount,
                         time_taken: "2.5s",
                         score: data.score,
-                        grade: data.grade
+                        grade: data.grade,
+                        checks: data.checks
                     })
                     .select()
                     .single();
@@ -559,8 +562,7 @@ export default function UserDashboard() {
                                                     <td className="py-4 pl-1 font-mono font-bold text-slate-350 truncate max-w-[200px]">
                                                         <button
                                                             onClick={() => {
-                                                                setUrl(scan.target_url);
-                                                                window.scrollTo({ top: 150, behavior: "smooth" });
+                                                                setSelectedHistoryScan(scan);
                                                             }}
                                                             className="text-left font-bold text-slate-350 hover:text-emerald-400 transition-colors cursor-pointer"
                                                         >
@@ -661,6 +663,112 @@ export default function UserDashboard() {
                     </div>
                 </div>
             </main>
+
+            {selectedHistoryScan && (
+                <ScanDetailModal 
+                    scan={selectedHistoryScan} 
+                    onClose={() => setSelectedHistoryScan(null)} 
+                />
+            )}
+        </div>
+    );
+}
+
+function ScanDetailModal({ scan, onClose }: { scan: ScanRecord; onClose: () => void }) {
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-300">
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-3xl max-h-[85vh] flex flex-col shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+                {/* Header */}
+                <div className="p-6 border-b border-slate-850 flex items-center justify-between shrink-0 bg-slate-950/40">
+                    <div className="min-w-0">
+                        <div className="flex items-center gap-3 mb-1">
+                            <span className={`text-[10px] font-mono uppercase tracking-widest px-2 py-0.5 rounded border ${
+                                scan.status === 'Completed' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-red-500/10 text-red-400 border-red-500/20'
+                            }`}>
+                                {scan.status}
+                            </span>
+                            <span className="text-[10px] text-slate-500 font-mono">
+                                Date Audited: {new Date(scan.created_at).toLocaleString()}
+                            </span>
+                        </div>
+                        <h2 className="text-lg font-bold text-white truncate max-w-md">{scan.target_url}</h2>
+                    </div>
+                    <button 
+                        onClick={onClose}
+                        className="p-1.5 hover:bg-slate-800 text-slate-400 hover:text-white rounded-lg transition-colors"
+                        title="Close Modal"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                </div>
+
+                {/* Body */}
+                <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                    {scan.status === 'Completed' ? (
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            <div className="bg-slate-950 border border-slate-800/80 p-4 rounded-xl flex flex-col items-center justify-center text-center">
+                                <span className={`text-3xl font-black ${
+                                    scan.grade?.startsWith('A') ? 'text-emerald-400' :
+                                    scan.grade?.startsWith('B') || scan.grade?.startsWith('C') ? 'text-amber-400' :
+                                    'text-rose-500'
+                                }`}>
+                                    {scan.grade}
+                                </span>
+                                <span className="text-[10px] uppercase tracking-widest text-slate-500 font-bold mt-1">Security Grade</span>
+                            </div>
+                            <div className="bg-slate-950 border border-slate-800/80 p-4 rounded-xl flex flex-col items-center justify-center text-center">
+                                <span className={`text-3xl font-black ${
+                                    scan.score && scan.score >= 80 ? 'text-emerald-400' :
+                                    scan.score && scan.score >= 55 ? 'text-amber-400' :
+                                    'text-rose-500'
+                                }`}>
+                                    {scan.score}%
+                                </span>
+                                <span className="text-[10px] uppercase tracking-widest text-slate-500 font-bold mt-1">Safety Index</span>
+                            </div>
+                            <div className="bg-slate-950 border border-slate-800/80 p-4 rounded-xl flex flex-col items-center justify-center text-center">
+                                <span className={`text-3xl font-black ${scan.vulns_found > 0 ? 'text-rose-450' : 'text-emerald-400'}`}>
+                                    {scan.vulns_found}
+                                </span>
+                                <span className="text-[10px] uppercase tracking-widest text-slate-500 font-bold mt-1">Vulnerabilities</span>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="p-5 bg-red-500/10 border border-red-500/20 rounded-xl text-center">
+                            <p className="text-red-400 font-bold text-sm">Scan Execution Failure</p>
+                            <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">{scan.error_message || 'A network connection or handshake timeout occurred.'}</p>
+                        </div>
+                    )}
+
+                    {/* Detailed audits list */}
+                    <div className="space-y-3">
+                        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 font-mono">Detailed Checks Analysis</h3>
+                        {scan.checks && scan.checks.length > 0 ? (
+                            scan.checks.map((check, idx) => (
+                                <CheckCard key={idx} check={check} />
+                            ))
+                        ) : scan.status === 'Completed' ? (
+                            <div className="text-slate-500 text-xs text-center py-12 border border-dashed border-slate-800 rounded-xl bg-slate-950/20 font-mono">
+                                No raw audit check details were saved for this scan.
+                            </div>
+                        ) : (
+                            <div className="text-slate-500 text-xs text-center py-12 border border-dashed border-slate-800 rounded-xl bg-slate-950/20 font-mono">
+                                Scanner execution failed. No check logs compiled.
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* Footer */}
+                <div className="p-4 border-t border-slate-800 flex justify-end shrink-0 bg-slate-950/40">
+                    <button 
+                        onClick={onClose}
+                        className="px-5 py-2.5 bg-slate-800 hover:bg-slate-750 border border-slate-700 hover:border-slate-600 text-white rounded-xl text-xs font-bold transition-all"
+                    >
+                        Close Details
+                    </button>
+                </div>
+            </div>
         </div>
     );
 }

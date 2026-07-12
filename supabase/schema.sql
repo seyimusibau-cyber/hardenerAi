@@ -62,6 +62,7 @@ CREATE TABLE public.scans (
     error_message TEXT,
     score INTEGER,
     grade TEXT,
+    checks JSONB,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -125,7 +126,6 @@ FOR SELECT USING (public.is_admin());
 CREATE POLICY "Admins can insert audit logs" ON public.admin_audit_logs
 FOR INSERT WITH CHECK (public.is_admin());
 
--- 5. Admin Scans View (Joins scan with user info for global feed)
 CREATE OR REPLACE VIEW public.admin_scans_view AS
 SELECT
     s.id AS scan_id,
@@ -137,6 +137,7 @@ SELECT
     s.error_message,
     s.score,
     s.grade,
+    s.checks,
     s.created_at,
     p.id AS user_id,
     p.full_name AS user_name,
