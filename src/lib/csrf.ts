@@ -1,5 +1,4 @@
 import { cookies } from 'next/headers';
-import crypto from 'crypto';
 
 // ============================================================================
 // CSRF Token Configuration
@@ -10,10 +9,29 @@ const CSRF_HEADER_NAME = 'x-csrf-token';
 const TOKEN_EXPIRY_MS = 3600000; // 1 hour
 
 // ============================================================================
+// Timing-safe String Comparison (Edge compatible)
+// ============================================================================
+function timingSafeEqual(a: string, b: string): boolean {
+    if (a.length !== b.length) {
+        return false;
+    }
+    let result = 0;
+    for (let i = 0; i < a.length; i++) {
+        result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+    }
+    return result === 0;
+}
+
+// ============================================================================
 // Generate CSRF Token
 // ============================================================================
 export async function generateCsrfToken(): Promise<string> {
-    const token = crypto.randomBytes(CSRF_TOKEN_LENGTH).toString('hex');
+    const bytes = new Uint8Array(CSRF_TOKEN_LENGTH);
+    globalThis.crypto.getRandomValues(bytes);
+    const token = Array.from(bytes)
+        .map((b) => b.toString(16).padStart(2, '0'))
+        .join('');
+    
     const cookieStore = await cookies();
     
     cookieStore.set(CSRF_COOKIE_NAME, token, {
@@ -38,16 +56,7 @@ export async function validateCsrfToken(token: string | null): Promise<boolean> 
     
     if (!storedToken) return false;
     
-    // Constant-time comparison to prevent timing attacks
-    try {
-        return crypto.timingSafeEqual(
-            Buffer.from(storedToken),
-            Buffer.from(token)
-        );
-    } catch {
-        // Tokens are different lengths
-        return false;
-    }
+    return timingSafeEqual(storedToken, token);
 }
 
 // ============================================================================

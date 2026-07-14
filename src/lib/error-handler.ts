@@ -178,8 +178,10 @@ export function handleError(error: unknown, request?: Request): NextResponse {
 // Async Error Wrapper for API Routes
 // ============================================================================
 export function asyncHandler(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     handler: (request: Request, context?: any) => Promise<NextResponse>
 ) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return async (request: Request, context?: any): Promise<NextResponse> => {
         try {
             return await handler(request, context);
@@ -200,7 +202,7 @@ export function errorResponse(
     return NextResponse.json(
         {
             error: message,
-            ...(process.env.NODE_ENV === 'development' && details && { details })
+            ...(process.env.NODE_ENV === 'development' && details ? { details } : {})
         },
         { status: statusCode }
     );

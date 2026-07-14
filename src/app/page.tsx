@@ -248,45 +248,6 @@ export default function Home() {
 
             setScanProgress(100);
 
-            // Log successfully completed scan to database & increment credit quota
-            if (isLoggedIn) {
-                try {
-                    const supabase = createClient();
-                    const { data: { user } } = await supabase.auth.getUser();
-                    if (user) {
-                        const failedCount = data.checks.filter((c: ScanCheck) => c.status === "Failed").length;
-                        
-                        // 1. Get current profile stats to increment scans credit
-                        const { data: profileData } = await supabase
-                            .from("profiles")
-                            .select("monthly_scans_used")
-                            .eq("id", user.id)
-                            .single();
-                            
-                        // 2. Insert scan record
-                        await supabase.from("scans").insert({
-                            user_id: user.id,
-                            target_url: trimmed,
-                            status: "Completed",
-                            progress: 100,
-                            vulns_found: failedCount,
-                            time_taken: "2.5s",
-                            score: data.score,
-                            grade: data.grade
-                        });
-
-                        // 3. Update scans used count
-                        const newScansUsed = (profileData?.monthly_scans_used || 0) + 1;
-                        await supabase
-                            .from("profiles")
-                            .update({ monthly_scans_used: newScansUsed })
-                            .eq("id", user.id);
-                    }
-                } catch {
-                    // silent database log failure
-                }
-            }
-
             setTimeout(() => {
                 setScanResult(data);
                 setIsScanning(false);
@@ -621,23 +582,53 @@ export default function Home() {
                                     <div className="space-y-3">
                                         {(() => {
                                             let failedCount = 0;
-                                            return scanResult.checks.map((check: ScanCheck, idx: number) => {
-                                                let isLocked = false;
+                                            const renderedChecks = [];
+                                            
+                                            for (let idx = 0; idx < scanResult.checks.length; idx++) {
+                                                const check = scanResult.checks[idx];
                                                 if (check.status === 'Failed') {
                                                     failedCount++;
-                                                    if (failedCount > 2) {
-                                                        isLocked = true;
+                                                    if (isLoggedIn || failedCount <= 2) {
+                                                        renderedChecks.push(
+                                                            <CheckCard
+                                                                key={idx}
+                                                                check={check}
+                                                                isLocked={false}
+                                                            />
+                                                        );
                                                     }
+                                                } else if (isLoggedIn) {
+                                                    renderedChecks.push(
+                                                        <CheckCard
+                                                            key={idx}
+                                                            check={check}
+                                                            isLocked={false}
+                                                        />
+                                                    );
                                                 }
-                                                return (
-                                                    <CheckCard
-                                                        key={idx}
-                                                        check={check}
-                                                        isLocked={isLocked}
-                                                    />
-                                                );
-                                            });
+                                            }
+                                            return renderedChecks;
                                         })()}
+
+                                        {!isLoggedIn && (
+                                            <div className="mt-6 p-6 rounded-xl bg-slate-900/80 border border-slate-800 text-center space-y-3">
+                                                <div className="w-10 h-10 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 flex items-center justify-center mx-auto">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                                                </div>
+                                                <h4 className="font-bold text-white text-sm">Remaining Security Results Locked</h4>
+                                                <p className="text-xs text-slate-400 max-w-sm mx-auto leading-relaxed">
+                                                    Sign in or register for a free account to unlock the remaining {scanResult.checks.length - 2} checks and see full remediation patches.
+                                                </p>
+                                                <div className="pt-2 flex justify-center gap-4">
+                                                    <Link href="/signup" className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition-all">
+                                                        Sign Up Free
+                                                    </Link>
+                                                    <Link href="/login" className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-350 rounded-lg text-xs font-bold transition-all border border-slate-700">
+                                                        Log In
+                                                    </Link>
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             </div>

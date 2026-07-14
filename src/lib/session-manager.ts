@@ -190,6 +190,7 @@ export async function invalidateAllUserSessions(userId: string): Promise<void> {
 // ============================================================================
 // Get Active Sessions
 // ============================================================================
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function getActiveSessions(userId: string): Promise<any[]> {
     try {
         const supabase = await createClient();

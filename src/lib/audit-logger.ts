@@ -321,6 +321,7 @@ export interface AuditLogQuery {
     limit?: number;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function queryAuditLogs(query: AuditLogQuery = {}): Promise<any[]> {
     const supabase = await createClient();
     
@@ -373,6 +374,7 @@ export interface AuditStatistics {
     failedEvents: number;
     criticalEvents: number;
     eventsByType: Record<string, number>;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     recentEvents: any[];
 }
 
