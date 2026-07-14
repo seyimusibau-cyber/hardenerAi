@@ -1,4 +1,3 @@
-import DOMPurify from 'isomorphic-dompurify';
 import { z } from 'zod';
 import crypto from 'crypto';
 
@@ -74,20 +73,34 @@ export const ScanStatusSchema = z.enum(['Running', 'Completed', 'Failed']);
 // HTML Sanitization for Display
 // ============================================================================
 export function sanitizeHtml(dirty: string, allowedTags: string[] = []): string {
-    return DOMPurify.sanitize(dirty, {
-        ALLOWED_TAGS: allowedTags.length > 0 ? allowedTags : ['b', 'i', 'em', 'strong', 'code', 'pre'],
-        ALLOWED_ATTR: []
-    });
+    if (typeof dirty !== 'string') return '';
+    
+    const tags = allowedTags.length > 0 ? allowedTags : ['b', 'i', 'em', 'strong', 'code', 'pre'];
+    
+    // Escape all HTML special characters first (XSS prevention)
+    let clean = dirty
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#x27;');
+        
+    // Selectively restore safe allowed tags (without any attributes)
+    for (const tag of tags) {
+        const openReg = new RegExp(`&lt;${tag}&gt;`, 'gi');
+        const closeReg = new RegExp(`&lt;\\/${tag}&gt;`, 'gi');
+        clean = clean.replace(openReg, `<${tag}>`).replace(closeReg, `</${tag}>`);
+    }
+    
+    return clean;
 }
 
 // ============================================================================
 // Strip All HTML Tags
 // ============================================================================
 export function stripHtml(dirty: string): string {
-    return DOMPurify.sanitize(dirty, {
-        ALLOWED_TAGS: [],
-        ALLOWED_ATTR: []
-    });
+    if (typeof dirty !== 'string') return '';
+    return dirty.replace(/<[^>]*>/g, '');
 }
 
 // ============================================================================
