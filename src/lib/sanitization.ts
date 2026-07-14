@@ -1,5 +1,6 @@
 import DOMPurify from 'isomorphic-dompurify';
 import { z } from 'zod';
+import crypto from 'crypto';
 
 // ============================================================================
 // URL Validation Schema
@@ -170,7 +171,7 @@ export function validateScanRequest(data: unknown): {
     if (!result.success) {
         return {
             success: false,
-            error: result.error.errors[0]?.message || 'Invalid request data'
+            error: result.error.issues[0]?.message || 'Invalid request data'
         };
     }
     
@@ -203,7 +204,7 @@ export function validateLoginRequest(data: unknown): {
     if (!result.success) {
         return {
             success: false,
-            error: result.error.errors[0]?.message || 'Invalid credentials'
+            error: result.error.issues[0]?.message || 'Invalid credentials'
         };
     }
     
@@ -238,7 +239,7 @@ export function validateSignupRequest(data: unknown): {
     if (!result.success) {
         return {
             success: false,
-            error: result.error.errors[0]?.message || 'Invalid signup data'
+            error: result.error.issues[0]?.message || 'Invalid signup data'
         };
     }
     
@@ -252,7 +253,6 @@ export function validateSignupRequest(data: unknown): {
 // Content Security Policy Nonce Generator
 // ============================================================================
 export function generateNonce(): string {
-    const crypto = require('crypto');
     return crypto.randomBytes(16).toString('base64');
 }
 

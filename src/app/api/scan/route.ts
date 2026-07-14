@@ -1,11 +1,14 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, NextRequest } from 'next/server';
 import dns from 'dns';
 import { promisify } from 'util';
-import net from 'net';
 import tls from 'tls';
-import { z } from 'zod';
+import { createClient } from '@/utils/supabase/server';
+import { rateLimit } from '@/lib/rate-limiter';
+import { validateUrlSafety } from '@/lib/ssrf-protection';
+import { handleError } from '@/lib/error-handler';
+import { logAuditEvent, logScanOperation, logRateLimitExceeded, logSSRFBlocked } from '@/lib/audit-logger';
+import { UrlSchema } from '@/lib/sanitization';
 
-const lookup = promisify(dns.lookup);
 const resolveTxt = promisify(dns.resolveTxt);
 
 // ============================================================================
@@ -31,11 +34,6 @@ function logSecurityEvent(level: 'INFO' | 'WARN' | 'ERROR', action: string, meta
 }
 
 // ============================================================================
-// 3. Input Validation Schema
-// ============================================================================
-const ScanRequestSchema = z.object({
-    url: z.string().trim().min(1, "URL is required")
-});
 
 // ============================================================================
 // 4. SSL/TLS Certificate Diagnostic Helper
@@ -111,27 +109,6 @@ function getCertificateInfo(hostname: string): Promise<CertInfo | null> {
 }
 
 // ============================================================================
-// 5. SSRF Protection — Private IP Detection
-// ============================================================================
-function isPrivateIp(ip: string): boolean {
-    if (ip === '127.0.0.1' || ip === '::1' || ip === '0.0.0.0' || ip === '::') return true;
-
-    if (net.isIPv4(ip)) {
-        const parts = ip.split('.').map(Number);
-        if (parts[0] === 10) return true;
-        if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true;
-        if (parts[0] === 192 && parts[1] === 168) return true;
-        if (parts[0] === 169 && parts[1] === 254) return true;
-    }
-
-    if (net.isIPv6(ip)) {
-        const lower = ip.toLowerCase();
-        if (lower.startsWith('fc') || lower.startsWith('fd')) return true;
-        if (lower.startsWith('fe8') || lower.startsWith('fe9') || lower.startsWith('fea') || lower.startsWith('feb')) return true;
-    }
-
-    return false;
-}
 
 // ============================================================================
 // 6. Deep Scan Helper Functions
@@ -536,70 +513,139 @@ function checkSriIntegrity(html: string, targetHostname: string): { scriptsWitho
 }
 
 // ============================================================================
-// 7. Main GET Handler
+// 7. Main GET Handler with Security Enhancements
 // ============================================================================
 export async function GET(request: Request) {
-    const { searchParams } = new URL(request.url);
-    const targetUrl = searchParams.get('url');
-
-    // Validate request
-    const validation = ScanRequestSchema.safeParse({ url: targetUrl });
-    if (!validation.success) {
-        logSecurityEvent('WARN', 'INVALID_REQUEST', { error: 'Missing or empty url query parameter' });
-        return NextResponse.json({ error: 'Missing or empty url query parameter' }, { status: 400 });
-    }
-
-    const { url } = validation.data;
-
-    // Normalize URL
-    let normalized = url.trim();
-    if (!/^https?:\/\//i.test(normalized)) {
-        normalized = 'https://' + normalized;
-    }
-
-    let hostname = '';
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let user: any = null;
+    let normalized = '';
     try {
-        const urlObj = new URL(normalized);
-        hostname = urlObj.hostname;
-    } catch {
-        logSecurityEvent('WARN', 'INVALID_URL', { url: normalized });
-        return NextResponse.json({ error: 'Invalid URL format' }, { status: 400 });
-    }
+        // ====================================================================
+        // 1. AUTHENTICATION CHECK
+        // ====================================================================
+        const supabase = await createClient();
+        const authResult = await supabase.auth.getUser();
+        user = authResult?.data?.user || null;
 
-    const requestHost = request.headers.get('host') || '';
-    const cleanRequestHost = requestHost.split(':')[0];
-    const isOwnDomain = hostname === cleanRequestHost || hostname.endsWith('.' + cleanRequestHost) || hostname === 'localhost' || hostname === '127.0.0.1';
-
-    // Cache eviction for memory safety
-    if (scanCache.size > 200) {
-        const now = Date.now();
-        for (const [key, val] of scanCache.entries()) {
-            if (now >= val.expiresAt) scanCache.delete(key);
+        // ====================================================================
+        // 2. RATE LIMITING
+        // ====================================================================
+        const rateLimitIdentifier = user ? user.id : (request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'anonymous');
+        const rateLimitResponse = await rateLimit(
+            request as NextRequest,
+            rateLimitIdentifier,
+            user ? 10 : 3, // Guests: 3 scans per minute, Users: 10 scans per minute
+            60000
+        );
+        
+        if (rateLimitResponse) {
+            if (user) {
+                await logRateLimitExceeded(user.id, request);
+            }
+            return rateLimitResponse;
         }
-    }
 
-    // Cache lookup
-    const cached = scanCache.get(normalized);
-    if (cached && Date.now() < cached.expiresAt) {
-        logSecurityEvent('INFO', 'SCAN_CACHE_HIT', { url: normalized, hostname });
-        return NextResponse.json(cached.data);
-    }
+        // ====================================================================
+        // 3. CHECK USER QUOTA
+        // ====================================================================
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let profile: any = null;
+        if (user) {
+            const { data: profileData } = await supabase
+                .from('profiles')
+                .select('plan, monthly_scans_used')
+                .eq('id', user.id)
+                .single();
+            profile = profileData;
 
-    // SSRF Protection: DNS Lookup and Private Range Check
-    try {
-        const lookupResult = await lookup(hostname);
-        const ip = lookupResult.address;
+            const quotaLimits: Record<string, number> = { 
+                Free: 10, 
+                Pro: 100, 
+                Enterprise: 9999 
+            };
+            const limit = quotaLimits[profile?.plan || 'Free'];
 
-        if (isPrivateIp(ip)) {
-            logSecurityEvent('WARN', 'SSRF_BLOCKED', { url: normalized, ip, hostname });
-            return NextResponse.json({
-                error: 'Security Block: Scanning private, local, or loopback network addresses is prohibited to prevent SSRF vulnerabilities.'
+            if (profile && profile.monthly_scans_used >= limit) {
+                await logAuditEvent({
+                    event_type: 'SCAN_FAILED',
+                    user_id: user.id,
+                    resource: '/api/scan',
+                    status: 'failure',
+                    metadata: { reason: 'Quota exceeded' }
+                }, request);
+                
+                return NextResponse.json(
+                    { error: 'Monthly scan quota exceeded. Please upgrade your plan.' },
+                    { status: 429 }
+                );
+            }
+        }
+
+        // ====================================================================
+        // 4. INPUT VALIDATION
+        // ====================================================================
+        const { searchParams } = new URL(request.url);
+        const targetUrl = searchParams.get('url');
+
+        const validation = UrlSchema.safeParse(targetUrl);
+        if (!validation.success) {
+            logSecurityEvent('WARN', 'INVALID_REQUEST', { 
+                error: validation.error.issues[0]?.message || 'Invalid URL',
+                userId: user?.id 
+            });
+            return NextResponse.json({ 
+                error: validation.error.issues[0]?.message || 'Invalid URL format' 
             }, { status: 400 });
         }
-    } catch {
-        logSecurityEvent('WARN', 'DNS_RESOLUTION_FAILED', { url: normalized, hostname });
-        return NextResponse.json({ error: `Could not resolve domain: ${hostname}` }, { status: 400 });
-    }
+
+        const { data: url } = validation;
+
+        // ====================================================================
+        // 5. ENHANCED SSRF PROTECTION
+        // ====================================================================
+        normalized = url.trim();
+        if (!/^https?:\/\//i.test(normalized)) {
+            normalized = 'https://' + normalized;
+        }
+
+        let hostname = '';
+        try {
+            const urlObj = new URL(normalized);
+            hostname = urlObj.hostname;
+        } catch {
+            logSecurityEvent('WARN', 'INVALID_URL', { url: normalized, userId: user?.id });
+            return NextResponse.json({ error: 'Invalid URL format' }, { status: 400 });
+        }
+
+        // Validate URL safety with enhanced SSRF protection
+        const ssrfValidation = await validateUrlSafety(normalized);
+        if (!ssrfValidation.safe) {
+            await logSSRFBlocked(normalized, ssrfValidation.reason || 'Unknown', user?.id, request);
+            return NextResponse.json({
+                error: 'Security Block: ' + (ssrfValidation.reason || 'This URL cannot be scanned for security reasons.')
+            }, { status: 400 });
+        }
+
+        const requestHost = request.headers.get('host') || '';
+        const cleanRequestHost = requestHost.split(':')[0];
+        const isOwnDomain = hostname === cleanRequestHost || hostname.endsWith('.' + cleanRequestHost) || hostname === 'localhost' || hostname === '127.0.0.1';
+
+        // ====================================================================
+        // 6. CACHE CHECK
+        // ====================================================================
+        if (scanCache.size > 200) {
+            const now = Date.now();
+            for (const [key, val] of scanCache.entries()) {
+                if (now >= val.expiresAt) scanCache.delete(key);
+            }
+        }
+
+        const cacheKey = `${normalized}_${user ? 'user' : 'guest'}`;
+        const cached = scanCache.get(cacheKey);
+        if (cached && Date.now() < cached.expiresAt) {
+            logSecurityEvent('INFO', 'SCAN_CACHE_HIT', { url: normalized, hostname, userId: user?.id });
+            return NextResponse.json(cached.data);
+        }
 
     // ========================================================================
     // Execute Scan: Primary Fetch + SSL + Deep Checks (all concurrent)
@@ -1303,6 +1349,59 @@ export async function GET(request: Request) {
         else if (finalScore >= 55) grade = 'C';
         else if (finalScore >= 35) grade = 'D';
 
+        // ====================================================================
+        // 7. UPDATE USER QUOTA & LOG SCAN
+        // ====================================================================
+        if (user) {
+            await supabase
+                .from('profiles')
+                .update({ monthly_scans_used: (profile?.monthly_scans_used || 0) + 1 })
+                .eq('id', user.id);
+
+            // Save scan to database
+            const failedCount = checks.filter(c => c.status === 'Failed').length;
+            const { error: insertError } = await supabase.from('scans').insert({
+                user_id: user.id,
+                target_url: normalized,
+                score: finalScore,
+                grade,
+                status: 'Completed',
+                progress: 100,
+                vulns_found: failedCount,
+                time_taken: '2.5s',
+                checks: checks
+            });
+            if (insertError) {
+                console.error('[DB_INSERT_ERROR]', insertError);
+            }
+
+            await logScanOperation(user.id, normalized, true, request, {
+                score: finalScore,
+                grade,
+                totalChecks: checks.length,
+                failedChecks: checks.filter(c => c.status === 'Failed').length
+            });
+        }
+
+        // Mask checks for guest users (only show 2 failed checks, lock the rest)
+        if (!user) {
+            let failedCount = 0;
+            for (let i = 0; i < checks.length; i++) {
+                if (checks[i].status === 'Failed') {
+                    failedCount++;
+                    if (failedCount > 2) {
+                        checks[i] = {
+                            ...checks[i],
+                            value: '🔒 Locked (Sign in to unlock)',
+                            description: 'This vulnerability detail is locked. Please sign in to view the detailed audit description.',
+                            remediation: '🔒 Please sign in to view remediation snippet and fix instructions.',
+                            isLocked: true
+                        };
+                    }
+                }
+            }
+        }
+
         const scanData = {
             url: normalized,
             score: finalScore,
@@ -1316,13 +1415,15 @@ export async function GET(request: Request) {
         };
 
         // Cache the scan
-        scanCache.set(normalized, {
+        const cacheKey = `${normalized}_${user ? 'user' : 'guest'}`;
+        scanCache.set(cacheKey, {
             data: scanData,
             expiresAt: Date.now() + CACHE_TTL_MS
         });
 
         logSecurityEvent('INFO', 'DEEP_SCAN_COMPLETED', {
             url: normalized,
+            userId: user?.id,
             score: finalScore,
             grade,
             totalChecks: checks.length,
@@ -1332,12 +1433,15 @@ export async function GET(request: Request) {
         return NextResponse.json(scanData);
 
     } catch (err) {
-        clearTimeout(timeoutId);
-        const errorName = (err instanceof Error) ? err.name : '';
-        logSecurityEvent('ERROR', 'SCAN_FAILED', { url: normalized, hostname, error: String(err) });
-        if (errorName === 'AbortError') {
-            return NextResponse.json({ error: 'Connection Timeout: The deep scan took too long. The target may be rate-limiting or blocking our requests.' }, { status: 504 });
+        // Log failed scan
+        if (user) {
+            await logScanOperation(user.id, normalized, false, request, {
+                error: err instanceof Error ? err.message : String(err)
+            });
         }
-        return NextResponse.json({ error: `Connection Failed: Unable to reach ${hostname}. Verify the URL is publicly accessible.` }, { status: 502 });
+        return handleError(err, request);
+    }
+    } catch (outerErr) {
+        return handleError(outerErr, request);
     }
 }
