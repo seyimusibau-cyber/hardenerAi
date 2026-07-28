@@ -65,7 +65,7 @@ export default function PricingPage() {
                             <div className="text-left space-y-0.5">
                                 <p className="font-bold text-white text-sm">Stripe Payments Coming Soon</p>
                                 <p className="text-xs text-slate-400">
-                                    The payment gateway for **{selectedPlan}** is currently in sandboxed test mode for the hackathon. Upgrade options will lock in shortly!
+                                    The payment gateway for **{selectedPlan}** is currently in sandboxed test mode. Upgrade options will be fully available shortly!
                                 </p>
                             </div>
                         </div>

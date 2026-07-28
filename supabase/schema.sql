@@ -17,6 +17,7 @@ CREATE TABLE public.profiles (
     monthly_scans_used INTEGER DEFAULT 0,
     quota_reset_date DATE DEFAULT CURRENT_DATE + INTERVAL '6 months',
     deep_scan_credits INTEGER DEFAULT 0,
+    tos_accepted_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP
     WITH
         TIME ZONE DEFAULT NOW(),
@@ -49,8 +50,9 @@ CREATE TABLE public.scans (
     id UUID DEFAULT gen_random_uuid () PRIMARY KEY,
     user_id UUID REFERENCES public.profiles (id) ON DELETE CASCADE NOT NULL,
     target_url TEXT NOT NULL,
-    status TEXT DEFAULT 'Running' CHECK (
+    status TEXT DEFAULT 'Queued' CHECK (
         status IN (
+            'Queued',
             'Running',
             'Completed',
             'Failed'
@@ -63,6 +65,10 @@ CREATE TABLE public.scans (
     score INTEGER,
     grade TEXT,
     checks JSONB,
+    ai_remediation_diff TEXT,
+    ai_unit_test TEXT,
+    security_health_score TEXT,
+    estimated_patch_hours INTEGER,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -76,6 +82,32 @@ CREATE POLICY "Users insert own scans" ON public.scans FOR
 INSERT
 WITH
     CHECK (auth.uid () = user_id);
+
+-- 2.5 Domain Verifications Table
+CREATE TABLE public.domain_verifications (
+    id UUID DEFAULT gen_random_uuid () PRIMARY KEY,
+    user_id UUID REFERENCES public.profiles (id) ON DELETE CASCADE NOT NULL,
+    domain TEXT NOT NULL,
+    verification_token TEXT NOT NULL,
+    status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'verified', 'failed')),
+    approval_type TEXT CHECK (approval_type IN ('dns_verified', 'html_verified', 'admin_override')),
+    approved_by UUID REFERENCES public.profiles (id),
+    verified_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+ALTER TABLE public.domain_verifications ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users view own domain verifications or admins view all" ON public.domain_verifications FOR
+SELECT USING (auth.uid () = user_id OR public.check_user_is_admin(auth.uid()));
+
+CREATE POLICY "Users insert own domain verifications" ON public.domain_verifications FOR
+INSERT WITH CHECK (auth.uid () = user_id);
+
+CREATE POLICY "Users update own domain verifications or admins update all" ON public.domain_verifications FOR
+UPDATE USING (auth.uid () = user_id OR public.check_user_is_admin(auth.uid()));
+
 
 -- 3. Billing Events Table (Stripe Webhook Sync)
 CREATE TABLE public.billing_events (
@@ -138,6 +170,10 @@ SELECT
     s.score,
     s.grade,
     s.checks,
+    s.ai_remediation_diff,
+    s.ai_unit_test,
+    s.security_health_score,
+    s.estimated_patch_hours,
     s.created_at,
     p.id AS user_id,
     p.full_name AS user_name,
@@ -159,7 +195,7 @@ DECLARE
 BEGIN
     SELECT COUNT(*) INTO total_users FROM public.profiles;
     
-    SELECT COUNT(*) INTO active_scans FROM public.scans WHERE status = 'Running';
+    SELECT COUNT(*) INTO active_scans FROM public.scans WHERE status IN ('Queued', 'Running');
     
     SELECT COALESCE(SUM(vulns_found), 0) INTO vulns_today 
     FROM public.scans 
@@ -189,11 +225,12 @@ $$;
 CREATE OR REPLACE FUNCTION public.handle_new_user() 
 RETURNS TRIGGER AS $$
 BEGIN
-  INSERT INTO public.profiles (id, full_name, email)
+  INSERT INTO public.profiles (id, full_name, email, tos_accepted_at)
   VALUES (
     NEW.id, 
     NEW.raw_user_meta_data->>'full_name', 
-    NEW.email
+    NEW.email,
+    (NEW.raw_user_meta_data->>'tos_accepted_at')::timestamp with time zone
   );
   RETURN NEW;
 END;
