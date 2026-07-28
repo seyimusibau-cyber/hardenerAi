@@ -24,7 +24,7 @@ export default async function ScanDetailsPage({ params }: { params: { id: string
     return (
         <div className="min-h-screen bg-[#01040f] text-white p-8">
             <div className="max-w-5xl mx-auto space-y-8">
-                
+
                 {/* Header */}
                 <div className="flex items-center justify-between border-b border-slate-800 pb-6">
                     <div>
@@ -32,11 +32,10 @@ export default async function ScanDetailsPage({ params }: { params: { id: string
                         <p className="text-slate-400 mt-1">{scan.target_url}</p>
                     </div>
                     <div className="flex items-center gap-4">
-                        <span className={`px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider ${
-                            scan.status === 'Completed' ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20' :
-                            scan.status === 'Queued' ? 'bg-amber-500/10 text-amber-500 border border-amber-500/20' :
-                            'bg-blue-500/10 text-blue-500 border border-blue-500/20'
-                        }`}>
+                        <span className={`px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider ${scan.status === 'Completed' ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20' :
+                                scan.status === 'Queued' ? 'bg-amber-500/10 text-amber-500 border border-amber-500/20' :
+                                    'bg-blue-500/10 text-blue-500 border border-blue-500/20'
+                            }`}>
                             {scan.status}
                         </span>
                     </div>
@@ -44,13 +43,13 @@ export default async function ScanDetailsPage({ params }: { params: { id: string
 
                 {/* Dual View Container */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                    
+
                     {/* Stakeholder View (Left) */}
                     <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-xl">
                         <h2 className="text-xl font-semibold mb-6 flex items-center gap-2">
                             <span className="text-emerald-500">📊</span> Stakeholder View
                         </h2>
-                        
+
                         <div className="space-y-6">
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="bg-slate-950 border border-slate-800 p-4 rounded-lg text-center">
@@ -82,7 +81,7 @@ export default async function ScanDetailsPage({ params }: { params: { id: string
                         <h2 className="text-xl font-semibold mb-6 flex items-center gap-2">
                             <span className="text-blue-500">💻</span> Developer View
                         </h2>
-                        
+
                         {scan.ai_remediation_diff ? (
                             <div className="space-y-6">
                                 <div>
