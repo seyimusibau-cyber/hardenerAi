@@ -1,28 +1,28 @@
-import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold, Schema, Type } from "@google/generative-ai";
+import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold, Schema, SchemaType } from "@google/generative-ai";
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
 
 const responseSchema: Schema = {
-  type: Type.OBJECT,
+  type: SchemaType.OBJECT,
   properties: {
     is_vulnerability: {
-      type: Type.BOOLEAN,
+      type: SchemaType.BOOLEAN,
       description: "True if this is a genuine vulnerability, False if it is a false positive.",
     },
     reasoning: {
-      type: Type.STRING,
+      type: SchemaType.STRING,
       description: "Detailed explanation of why this is or isn't a vulnerability.",
     },
     unified_diff: {
-      type: Type.STRING,
+      type: SchemaType.STRING,
       description: "A valid unified git diff to patch the vulnerability. Leave empty if false positive.",
     },
     unit_test: {
-      type: Type.STRING,
+      type: SchemaType.STRING,
       description: "A unit test confirming the fix works. Leave empty if false positive.",
     },
     estimated_patch_hours: {
-      type: Type.INTEGER,
+      type: SchemaType.INTEGER,
       description: "Estimated engineering hours required to apply and test this patch.",
     }
   },

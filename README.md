@@ -2,7 +2,7 @@
 
 **Hardener AI** is an advanced, fully-automated Agentic Security Orchestrator designed to perform deep, AI-driven vulnerability assessments on modern web applications. 
 
-Rather than just outputting generic vulnerability flags, Hardener AI acts as an autonomous security engineer. It actively scans targets, runs identified vulnerabilities through a dual-pass **Gemini 2.5 Flash reasoning engine**, and automatically generates production-ready remediation blueprints (Unified Git Diffs) and regression tests for your developers.
+Rather than just outputting generic vulnerability flags, Hardener AI acts as an autonomous security engineer. It actively scans targets, runs identified vulnerabilities through a dual-pass **AI  2.5 Flash reasoning engine**, and automatically generates production-ready remediation blueprints (Unified Git Diffs) and regression tests for your developers.
 
 ---
 
@@ -19,8 +19,8 @@ To decouple the web UI from the heavy lifting of security scanning, Hardener AI 
 ### 3. Ephemeral Execution Workers (Fly.io)
 QStash webhooks trigger **Fly.io Machines**—ephemeral, sub-second boot Docker containers. These isolated environments perform the actual heavy scanning (e.g., executing Semgrep, Gitleaks, Nmap) against the target. Once the scan completes and outputs a standard SARIF payload, the machine is automatically destroyed, ensuring zero resource leakage and maintaining strict environmental isolation.
 
-### 4. The AI Reasoning Engine (Gemini 2.5 Flash)
-Raw vulnerability outputs are noisy. Hardener AI pipes raw scan results and the affected code snippets into the **Gemini Verifier Pipeline**. By utilizing strict JSON schemas and bypassing generic safety filters (for security analysis purposes), Gemini acts as a false-positive filter and a remediation engineer, generating precise git diffs and unit tests for valid vulnerabilities.
+### 4. The AI Reasoning Engine (AI  2.5 Flash)
+Raw vulnerability outputs are noisy. Hardener AI pipes raw scan results and the affected code snippets into the **AI  Verifier Pipeline**. By utilizing strict JSON schemas and bypassing generic safety filters (for security analysis purposes), AI  acts as a false-positive filter and a remediation engineer, generating precise git diffs and unit tests for valid vulnerabilities.
 
 ---
 
@@ -47,7 +47,7 @@ Security results shouldn't just be a wall of text. We built a dual-view system:
 - **Database & Auth:** Supabase (PostgreSQL with strict Row-Level Security)
 - **Job Queues:** Upstash QStash (Serverless HTTP webhooks)
 - **Worker Infrastructure:** Fly.io Machines (Ephemeral Docker Workers)
-- **AI Engine:** Google Gemini API (`gemini-2.5-flash`)
+- **AI Engine:** Google AI  API (`AI -2.5-flash`)
 - **Payments (KYC):** Stripe Checkout (Enforcing billing address collection)
 
 ---
@@ -56,7 +56,7 @@ Security results shouldn't just be a wall of text. We built a dual-view system:
 
 ### 1. Prerequisites
 - Node.js 20+ installed
-- Accounts for Supabase, Stripe, Upstash, Google AI Studio (Gemini), and Fly.io
+- Accounts for Supabase, Stripe, Upstash, Google AI Studio (AI ), and Fly.io
 
 ### 2. Installation
 Clone the repository and install dependencies:
@@ -92,8 +92,8 @@ QSTASH_TOKEN=...
 QSTASH_CURRENT_SIGNING_KEY=...
 QSTASH_NEXT_SIGNING_KEY=...
 
-# Gemini AI (Reasoning Engine)
-GEMINI_API_KEY=...
+# AI  AI (Reasoning Engine)
+AI _API_KEY=...
 
 # Fly.io (Ephemeral Docker Workers)
 FLY_API_TOKEN=...
