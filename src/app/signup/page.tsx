@@ -11,6 +11,7 @@ export default function SignupPage() {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [name, setName] = useState("");
+    const [acceptTos, setAcceptTos] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const router = useRouter();
@@ -19,6 +20,19 @@ export default function SignupPage() {
     const handleSignup = async (e: React.FormEvent) => {
         e.preventDefault();
         setError(null);
+
+        const freeEmailProviders = ['gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'protonmail.com', 'mail.com'];
+        const domain = email.split('@')[1]?.toLowerCase();
+        
+        if (freeEmailProviders.includes(domain)) {
+            setError("Please use a corporate email address. Free providers are restricted for security scanning.");
+            return;
+        }
+
+        if (!acceptTos) {
+            setError("You must accept the Terms of Service, Acceptable Use Policy, and Indemnification Agreement.");
+            return;
+        }
 
         // Password complexity validation
         if (password.length < 12) {
@@ -50,6 +64,7 @@ export default function SignupPage() {
             options: {
                 data: {
                     full_name: name,
+                    tos_accepted_at: new Date().toISOString()
                 },
                 // Replace this with your actual production URL later
                 emailRedirectTo: `${location.origin}/auth/callback`,
@@ -154,6 +169,19 @@ export default function SignupPage() {
                                 minLength={12}
                             />
                             <p className="text-[10px] text-slate-500 pl-1 mt-1">Must be at least 12 characters with an uppercase letter, number, and special character.</p>
+                        </div>
+
+                        <div className="flex items-start space-x-2 mt-4">
+                            <input
+                                type="checkbox"
+                                id="tos"
+                                checked={acceptTos}
+                                onChange={(e) => setAcceptTos(e.target.checked)}
+                                className="mt-1 h-4 w-4 rounded border-slate-700 bg-slate-950 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-slate-900"
+                            />
+                            <label htmlFor="tos" className="text-xs text-slate-400">
+                                I accept the <Link href="/tos" className="text-emerald-500 hover:underline">Terms of Service</Link>, <Link href="/aup" className="text-emerald-500 hover:underline">Acceptable Use Policy</Link>, and <Link href="/indemnification" className="text-emerald-500 hover:underline">Indemnification Agreement</Link>. I confirm I will only scan systems I am authorized to test.
+                            </label>
                         </div>
 
                         <button
