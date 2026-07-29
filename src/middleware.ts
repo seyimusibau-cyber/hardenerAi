@@ -7,8 +7,8 @@ export async function middleware(request: NextRequest) {
     // Update Supabase session
     const response = await updateSession(request)
     
-    // Skip CSRF and session checks for public routes
-    const publicRoutes = ['/login', '/signup', '/', '/pricing', '/docs', '/api/scan']
+    // Skip CSRF and session checks for public/auth-handled routes
+    const publicRoutes = ['/login', '/signup', '/', '/pricing', '/docs', '/api/scan', '/api/verify-domain']
     const isPublicRoute = publicRoutes.some(route => 
         request.nextUrl.pathname === route || 
         request.nextUrl.pathname.startsWith('/_next') ||
