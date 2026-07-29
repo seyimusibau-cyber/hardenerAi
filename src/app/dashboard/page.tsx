@@ -460,7 +460,7 @@ export default function UserDashboard() {
                 </div>
 
                 {/* Domain TXT Verification Card */}
-                <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 space-y-4 relative overflow-hidden">
+                <div className="p-4 sm:p-6 rounded-2xl bg-slate-900 border border-slate-800 space-y-4 relative overflow-hidden">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                         <div>
                             <div className="flex items-center gap-2">

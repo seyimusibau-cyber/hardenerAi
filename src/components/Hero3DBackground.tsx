@@ -20,7 +20,9 @@ export default function Hero3DBackground() {
       0.1,
       1000
     );
-    camera.position.z = 30;
+    // Camera setup - pull back on mobile so sphere stays in background
+    const isMobile = window.innerWidth < 768;
+    camera.position.z = isMobile ? 46 : 30;
 
     // Renderer setup
     const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
@@ -99,6 +101,8 @@ export default function Hero3DBackground() {
     // --- Resize Handler ---
     const handleResize = () => {
       if (!container) return;
+      const isMobileScreen = window.innerWidth < 768;
+      camera.position.z = isMobileScreen ? 46 : 30;
       camera.aspect = container.clientWidth / container.clientHeight;
       camera.updateProjectionMatrix();
       renderer.setSize(container.clientWidth, container.clientHeight);
