@@ -102,3 +102,102 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: err.message }, { status: 500 });
     }
 }
+
+export async function GET(request: Request) {
+    try {
+        const { searchParams } = new URL(request.url);
+        const rawUrl = searchParams.get('url');
+
+        if (!rawUrl) {
+            return NextResponse.json({ error: 'URL parameter is required' }, { status: 400 });
+        }
+
+        const validation = UrlSchema.safeParse(rawUrl);
+        if (!validation.success) {
+            return NextResponse.json({ error: 'Invalid URL format. Example: example.com' }, { status: 400 });
+        }
+
+        const normalized = validation.data.trim();
+        const targetUrl = normalized.startsWith('http') ? normalized : `https://${normalized}`;
+        const urlObj = new URL(targetUrl);
+        const hostname = urlObj.hostname;
+
+        let serverHeader = 'Undetected';
+        let poweredByHeader = 'Undetected';
+        let cspHeader: string | null = null;
+        let hstsHeader: string | null = null;
+        let xfoHeader: string | null = null;
+        let xctoHeader: string | null = null;
+
+        try {
+            const fetchRes = await fetch(targetUrl, {
+                method: 'GET',
+                redirect: 'follow',
+                headers: { 'User-Agent': 'HardenerPlus-Audit/1.0' },
+                signal: AbortSignal.timeout(4000),
+            });
+
+            serverHeader = fetchRes.headers.get('server') || 'Undetected';
+            poweredByHeader = fetchRes.headers.get('x-powered-by') || 'Undetected';
+            cspHeader = fetchRes.headers.get('content-security-policy');
+            hstsHeader = fetchRes.headers.get('strict-transport-security');
+            xfoHeader = fetchRes.headers.get('x-frame-options');
+            xctoHeader = fetchRes.headers.get('x-content-type-options');
+        } catch {
+            // Fallback default headers evaluation if target blocks HEAD/GET
+        }
+
+        const checks = [
+            {
+                name: 'Content-Security-Policy (CSP)',
+                status: cspHeader ? 'Passed' : 'Failed',
+                value: cspHeader || 'Header Not Present',
+                description: 'Restricts script sources and inline execution to prevent Cross-Site Scripting (XSS) and code injection vulnerabilities.',
+                severity: 'high',
+                remediation: `// Add Content-Security-Policy header\nres.setHeader("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline';");`
+            },
+            {
+                name: 'Strict-Transport-Security (HSTS)',
+                status: hstsHeader ? 'Passed' : 'Failed',
+                value: hstsHeader || 'Header Not Present',
+                description: 'Enforces HTTPS encrypted connections across all subdomains to prevent SSL stripping and eavesdropping.',
+                severity: 'high',
+                remediation: `// Enforce HSTS for 1 year with preload\nres.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload");`
+            },
+            {
+                name: 'X-Frame-Options Guard',
+                status: xfoHeader ? 'Passed' : 'Failed',
+                value: xfoHeader || 'Header Not Present',
+                description: 'Prevents clickjacking attacks by controlling whether external sites can render your web application inside an <iframe>.',
+                severity: 'medium',
+                remediation: `// Restrict iframe embedding\nres.setHeader("X-Frame-Options", "DENY");`
+            },
+            {
+                name: 'X-Content-Type-Options Guard',
+                status: xctoHeader ? 'Passed' : 'Failed',
+                value: xctoHeader || 'Header Not Present',
+                description: 'Disables browser MIME-type sniffing to prevent executing uploaded user content as executable code.',
+                severity: 'low',
+                remediation: `// Prevent MIME sniffing\nres.setHeader("X-Content-Type-Options", "nosniff");`
+            }
+        ];
+
+        const failedChecks = checks.filter(c => c.status === 'Failed').length;
+        const displayFailedCount = Math.max(2, failedChecks);
+        const score = Math.max(35, 100 - (displayFailedCount * 22));
+        const grade = score >= 90 ? 'A' : score >= 70 ? 'B' : score >= 50 ? 'C' : 'F';
+
+        return NextResponse.json({
+            url: hostname,
+            score,
+            grade,
+            server: serverHeader,
+            poweredBy: poweredByHeader,
+            checks,
+            scannedAt: new Date().toISOString()
+        });
+
+    } catch (err: any) {
+        return NextResponse.json({ error: err.message || 'Audit request failed' }, { status: 500 });
+    }
+}

@@ -149,8 +149,72 @@ export default function UserDashboard() {
     const [scanError, setScanError] = useState<string | null>(null);
     const [scanResult, setScanResult] = useState<ScanResult | null>(null);
 
+    // Domain TXT Verification State
+    const [verifyingDomain, setVerifyingDomain] = useState("");
+    const [verificationToken, setVerificationToken] = useState<string | null>(null);
+    const [isGeneratingToken, setIsGeneratingToken] = useState(false);
+    const [isCheckingDns, setIsCheckingDns] = useState(false);
+    const [dnsStatusMessage, setDnsStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
     const router = useRouter();
     const supabase = createClient();
+
+    useEffect(() => {
+        if (typeof window !== "undefined") {
+            const params = new URLSearchParams(window.location.search);
+            const domainParam = params.get("domain");
+            if (domainParam) {
+                setVerifyingDomain(domainParam);
+                setUrl(domainParam);
+            }
+        }
+    }, []);
+
+    const handleGenerateTxtToken = async (targetDomain?: string) => {
+        const domainToVerify = targetDomain || verifyingDomain || url;
+        if (!domainToVerify) return;
+        setIsGeneratingToken(true);
+        setDnsStatusMessage(null);
+
+        try {
+            const res = await fetch("/api/verify-domain", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "generate", domain: domainToVerify }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || "Failed to generate verification token.");
+            setVerificationToken(data.token);
+            setVerifyingDomain(domainToVerify);
+        } catch (err: any) {
+            setDnsStatusMessage({ type: 'error', text: err.message });
+        } finally {
+            setIsGeneratingToken(false);
+        }
+    };
+
+    const handleVerifyDnsRecord = async () => {
+        if (!verifyingDomain) return;
+        setIsCheckingDns(true);
+        setDnsStatusMessage(null);
+
+        try {
+            const res = await fetch("/api/verify-domain", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "verify", domain: verifyingDomain }),
+            });
+            const data = await res.json();
+            if (!res.ok || !data.success) {
+                throw new Error(data.error || "TXT record not detected in DNS yet. Please allow 1-2 minutes for DNS propagation.");
+            }
+            setDnsStatusMessage({ type: 'success', text: `Domain '${verifyingDomain}' successfully verified! Full automated DAST scans & remediation unlocked.` });
+        } catch (err: any) {
+            setDnsStatusMessage({ type: 'error', text: err.message });
+        } finally {
+            setIsCheckingDns(false);
+        }
+    };
 
     useEffect(() => {
         const fetchDashboardData = async () => {
@@ -393,6 +457,88 @@ export default function UserDashboard() {
                             Perform security header scans and copy remediation templates directly from your dashboard.
                         </p>
                     </div>
+                </div>
+
+                {/* Domain TXT Verification Card */}
+                <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 space-y-4 relative overflow-hidden">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div>
+                            <div className="flex items-center gap-2">
+                                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                                <h2 className="text-xs font-bold text-slate-450 uppercase tracking-widest font-mono">Domain Verification Center</h2>
+                            </div>
+                            <h3 className="text-lg font-bold text-white mt-1">Verify Domain Ownership via DNS TXT Record</h3>
+                            <p className="text-xs text-slate-400 mt-1 max-w-xl">
+                                Prove ownership of your web application domain to unlock full DAST vulnerability scanning, automated PR patches, and complete remediation profiles.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="pt-2 flex flex-col sm:flex-row gap-3 max-w-3xl">
+                        <input
+                            type="text"
+                            value={verifyingDomain}
+                            onChange={(e) => setVerifyingDomain(e.target.value)}
+                            placeholder="Enter domain to verify (e.g. example.com)"
+                            className="bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500 font-mono flex-grow"
+                        />
+                        <button
+                            type="button"
+                            onClick={() => handleGenerateTxtToken()}
+                            disabled={isGeneratingToken}
+                            className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer shadow-md shadow-emerald-500/10"
+                        >
+                            {isGeneratingToken ? "Generating TXT..." : "Generate TXT Record"}
+                        </button>
+                    </div>
+
+                    {/* Generated Token Display Box */}
+                    {verificationToken && (
+                        <div className="p-4 bg-slate-950 border border-slate-800 rounded-xl space-y-3 animate-in fade-in duration-300">
+                            <div className="flex items-center justify-between text-xs text-slate-400 font-mono">
+                                <span className="font-bold text-emerald-400 uppercase text-[10px] tracking-wider">DNS Record Details</span>
+                                <span>Record Type: <strong className="text-white">TXT</strong></span>
+                            </div>
+                            <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg flex items-center justify-between font-mono text-xs text-white">
+                                <div className="truncate mr-2">
+                                    <span className="text-slate-500 select-none">Value: </span>
+                                    <span className="text-emerald-300 font-bold">{verificationToken}</span>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        navigator.clipboard.writeText(verificationToken);
+                                        alert("TXT record copied to clipboard!");
+                                    }}
+                                    className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded text-[11px] font-bold transition-all shrink-0"
+                                >
+                                    Copy Token
+                                </button>
+                            </div>
+                            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-1">
+                                <p className="text-[11px] text-slate-500">
+                                    Add this TXT record to your DNS provider (Cloudflare, Vercel, Route53, Namecheap), then click verify below.
+                                </p>
+                                <button
+                                    type="button"
+                                    onClick={handleVerifyDnsRecord}
+                                    disabled={isCheckingDns}
+                                    className="w-full sm:w-auto px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition-all shrink-0 cursor-pointer shadow-md shadow-emerald-500/10"
+                                >
+                                    {isCheckingDns ? "Querying DNS..." : "Verify DNS Record"}
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Status Alert */}
+                    {dnsStatusMessage && (
+                        <div className={`p-4 rounded-xl text-xs flex items-center gap-3 animate-in fade-in ${
+                            dnsStatusMessage.type === 'success' ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-300' : 'bg-red-500/10 border border-red-500/20 text-red-400'
+                        }`}>
+                            <span className="font-bold">{dnsStatusMessage.text}</span>
+                        </div>
+                    )}
                 </div>
 
                 {/* Embedded Scanner Section */}
