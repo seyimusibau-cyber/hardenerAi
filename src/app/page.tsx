@@ -6,6 +6,10 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
+import nextDynamic from "next/dynamic";
+import ScrollReveal from "@/components/ScrollReveal";
+
+const Hero3DBackground = nextDynamic(() => import("@/components/Hero3DBackground"), { ssr: false });
 
 interface ScanCheck {
     name: string;
@@ -403,11 +407,14 @@ export default function Home() {
             </nav>
 
             {/* Hero Section */}
-            <section className="pt-32 pb-16 px-4">
-                <div className="max-w-4xl mx-auto text-center space-y-6">
-                    <h1 className="text-4xl sm:text-6xl font-black text-white tracking-tight">
+            <section className="relative pt-32 pb-16 px-4 overflow-hidden min-h-[75vh] flex flex-col justify-center items-center">
+                <Hero3DBackground />
+                <ScrollReveal variant="flip-up" className="relative z-10 max-w-4xl mx-auto text-center space-y-6 w-full">
+                    <h1 className="text-4xl sm:text-6xl md:text-7xl font-black tracking-tight text-white leading-tight">
                         Harden Your App Security <br />
-                        <span className="text-emerald-500">In 10 Seconds.</span>
+                        <span className="bg-gradient-to-r from-emerald-400 via-teal-300 to-emerald-500 bg-clip-text text-transparent drop-shadow-[0_0_35px_rgba(16,185,129,0.5)] animate-pulse">
+                            In 10 Seconds.
+                        </span>
                     </h1>
 
                     <p className="text-sm sm:text-md text-slate-400 max-w-xl mx-auto leading-relaxed">
@@ -611,20 +618,22 @@ export default function Home() {
                                         })()}
 
                                         {!isLoggedIn && (
-                                            <div className="mt-6 p-6 rounded-xl bg-slate-900/80 border border-slate-800 text-center space-y-3">
-                                                <div className="w-10 h-10 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 flex items-center justify-center mx-auto">
-                                                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                                            <div className="mt-6 p-6 rounded-xl bg-slate-950 border border-emerald-500/30 text-center space-y-4 shadow-xl relative overflow-hidden">
+                                                <div className="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 flex items-center justify-center mx-auto">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
                                                 </div>
-                                                <h4 className="font-bold text-white text-sm">Remaining Security Results Locked</h4>
-                                                <p className="text-xs text-slate-400 max-w-sm mx-auto leading-relaxed">
-                                                    Sign in or register for a free account to unlock the remaining {scanResult.checks.length - 2} checks and see full remediation patches.
-                                                </p>
-                                                <div className="pt-2 flex justify-center gap-4">
-                                                    <Link href="/signup" className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition-all">
-                                                        Sign Up Free
+                                                <div className="space-y-1">
+                                                    <h4 className="font-bold text-white text-base">2 Security Vulnerabilities Identified for {scanResult.url}</h4>
+                                                    <p className="text-xs text-slate-400 max-w-md mx-auto leading-relaxed">
+                                                        To unlock full remediation code snippets, automated patch tools, and run deep scans, you must sign in and verify ownership of <span className="font-mono text-emerald-400 font-bold">{scanResult.url}</span> by adding a DNS TXT record (<code className="bg-slate-900 px-1.5 py-0.5 rounded text-[11px] text-emerald-300 font-mono">hardener-verification=...</code>).
+                                                    </p>
+                                                </div>
+                                                <div className="pt-2 flex flex-col sm:flex-row justify-center gap-3">
+                                                    <Link href={`/signup?domain=${encodeURIComponent(scanResult.url)}`} className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition-all shadow-lg shadow-emerald-500/10">
+                                                        Sign Up & Add TXT Record
                                                     </Link>
-                                                    <Link href="/login" className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-350 rounded-lg text-xs font-bold transition-all border border-slate-700">
-                                                        Log In
+                                                    <Link href={`/login?domain=${encodeURIComponent(scanResult.url)}`} className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-slate-350 border border-slate-700 rounded-lg text-xs font-bold transition-all">
+                                                        Log In to Verify Domain
                                                     </Link>
                                                 </div>
                                             </div>
@@ -634,16 +643,17 @@ export default function Home() {
                             </div>
                         )}
 
+            {/* Scanner Input Area closing div */}
                         <p className="mt-6 text-xs text-slate-500 italic">
                             Non-invasive surface audit. No login required for initial scan.
                         </p>
                     </div>
-                </div>
+                </ScrollReveal>
             </section>
 
             {/* Tech Stack Banner */}
             <section className="py-10 border-b border-t border-slate-900 bg-[#01030a]">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+                <ScrollReveal variant="cyber-skew" delay={100} className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
                     <p className="text-[10px] font-bold text-slate-500 uppercase tracking-[0.2em] mb-8">Securing Modern Architectures</p>
                     <div className="flex flex-wrap justify-center gap-8 md:gap-16 opacity-50 grayscale hover:grayscale-0 transition-all duration-500">
                         <div className="flex items-center gap-2 text-white font-bold"><div className="w-3 h-3 bg-blue-500 rounded-full"></div> React</div>
@@ -653,23 +663,23 @@ export default function Home() {
                         <div className="flex items-center gap-2 text-white font-bold"><div className="w-3 h-3 bg-orange-500 rounded-full"></div> Rust</div>
                         <div className="flex items-center gap-2 text-white font-bold"><div className="w-3 h-3 bg-blue-600 rounded-full"></div> Postgres</div>
                     </div>
-                </div>
+                </ScrollReveal>
             </section>
 
             {/* Workflow Section */}
             <section className="py-24 bg-[#020617]">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <div className="text-center mb-20">
+                    <ScrollReveal variant="slide-up" className="text-center mb-20">
                         <h2 className="text-3xl font-bold text-white mb-4">Seamless Integration. Immediate Results.</h2>
                         <p className="text-slate-500 uppercase tracking-widest text-xs font-bold">How Hardener Plus Works</p>
-                    </div>
+                    </ScrollReveal>
 
                     <div className="grid md:grid-cols-3 gap-12 relative">
                         {/* Connecting Line */}
                         <div className="hidden md:block absolute top-12 left-[16.66%] right-[16.66%] h-0.5 bg-gradient-to-r from-emerald-500/0 via-emerald-500/20 to-emerald-500/0"></div>
 
                         {/* Step 1 */}
-                        <div className="relative text-center">
+                        <ScrollReveal variant="slide-right" delay={100} className="relative text-center">
                             <div className="w-24 h-24 mx-auto bg-slate-900 border border-slate-800 rounded-full flex items-center justify-center mb-6 relative z-10 transition-transform hover:scale-105 duration-300">
                                 <span className="text-2xl font-bold text-emerald-500">01</span>
                             </div>
@@ -677,10 +687,10 @@ export default function Home() {
                             <p className="text-slate-400 text-sm leading-relaxed max-w-xs mx-auto">
                                 Link your repository or provide a staging URL. Our engine maps your architecture dynamically.
                             </p>
-                        </div>
+                        </ScrollReveal>
 
                         {/* Step 2 */}
-                        <div className="relative text-center">
+                        <ScrollReveal variant="flip-up" delay={250} className="relative text-center">
                             <div className="w-24 h-24 mx-auto bg-slate-900 border border-emerald-500/30 rounded-full flex items-center justify-center mb-6 relative z-10 shadow-[0_0_30px_rgba(16,185,129,0.1)] transition-transform hover:scale-105 duration-300">
                                 <span className="text-2xl font-bold text-emerald-500">02</span>
                             </div>
@@ -688,10 +698,10 @@ export default function Home() {
                             <p className="text-slate-400 text-sm leading-relaxed max-w-xs mx-auto">
                                 We run proprietary heuristics to detect business-logic flaws and injection vulnerabilities.
                             </p>
-                        </div>
+                        </ScrollReveal>
 
                         {/* Step 3 */}
-                        <div className="relative text-center">
+                        <ScrollReveal variant="slide-left" delay={400} className="relative text-center">
                             <div className="w-24 h-24 mx-auto bg-slate-900 border border-slate-800 rounded-full flex items-center justify-center mb-6 relative z-10 transition-transform hover:scale-105 duration-300">
                                 <span className="text-2xl font-bold text-emerald-500">03</span>
                             </div>
@@ -699,7 +709,7 @@ export default function Home() {
                             <p className="text-slate-400 text-sm leading-relaxed max-w-xs mx-auto">
                                 Review and merge auto-generated PRs containing exact fixes for your specific framework.
                             </p>
-                        </div>
+                        </ScrollReveal>
                     </div>
                 </div>
             </section>
@@ -707,13 +717,13 @@ export default function Home() {
             {/* Features Grid */}
             <section id="how" className="py-24 bg-[#01040f] border-y border-slate-900">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <div className="text-center mb-20">
+                    <ScrollReveal variant="slide-up" className="text-center mb-20">
                         <h2 className="text-3xl font-bold text-white mb-4">Engineered for Reliability</h2>
                         <p className="text-slate-500 uppercase tracking-widest text-xs font-bold">The Last Mile of Development</p>
-                    </div>
+                    </ScrollReveal>
 
                     <div className="grid md:grid-cols-3 gap-6">
-                        <div className="p-10 rounded-xl bg-slate-900/50 border border-slate-800 hover:border-emerald-500/50 transition-all">
+                        <ScrollReveal variant="3d-zoom" delay={100} className="p-10 rounded-xl bg-slate-900/50 border border-slate-800 hover:border-emerald-500/50 transition-all">
                             <div className="text-emerald-500 mb-8">
                                 <svg
                                     xmlns="http://www.w3.org/2000/svg"
@@ -733,9 +743,9 @@ export default function Home() {
                             <p className="text-slate-400 leading-relaxed text-sm">
                                 Utilizes advanced heuristics and dynamic profiling to identify sophisticated logical bypasses.
                             </p>
-                        </div>
+                        </ScrollReveal>
 
-                        <div className="p-10 rounded-xl bg-slate-900/50 border border-slate-800 hover:border-emerald-500/50 transition-all">
+                        <ScrollReveal variant="3d-zoom" delay={250} className="p-10 rounded-xl bg-slate-900/50 border border-slate-800 hover:border-emerald-500/50 transition-all">
                             <div className="text-emerald-500 mb-8">
                                 <svg
                                     xmlns="http://www.w3.org/2000/svg"
@@ -756,9 +766,9 @@ export default function Home() {
                             <p className="text-slate-400 leading-relaxed text-sm">
                                 Clean, actionable summaries. We prioritize fixes based on business impact, not just CVSS scores.
                             </p>
-                        </div>
+                        </ScrollReveal>
 
-                        <div className="p-10 rounded-xl bg-slate-900/50 border border-slate-800 hover:border-emerald-500/50 transition-all">
+                        <ScrollReveal variant="3d-zoom" delay={400} className="p-10 rounded-xl bg-slate-900/50 border border-slate-800 hover:border-emerald-500/50 transition-all">
                             <div className="text-emerald-500 mb-8">
                                 <svg
                                     xmlns="http://www.w3.org/2000/svg"
@@ -779,14 +789,14 @@ export default function Home() {
                             <p className="text-slate-400 leading-relaxed text-sm">
                                 Receive tested code snippets for your specific stack (PHP, C#, Node) to close vulnerabilities immediately.
                             </p>
-                        </div>
+                        </ScrollReveal>
                     </div>
                 </div>
             </section>
 
             {/* Dashboard Preview */}
             <section className="py-24 px-4">
-                <div className="max-w-6xl mx-auto">
+                <ScrollReveal variant="zoom-in" delay={150} className="max-w-6xl mx-auto">
                     <div className="bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden shadow-2xl">
                         <div className="border-b border-slate-800 p-5 flex items-center justify-between bg-slate-950/50">
                             <div className="flex gap-1.5">
@@ -911,16 +921,18 @@ export default function Home() {
                             </div>
                         </div>
                     </div>
-                </div>
+                </ScrollReveal>
             </section>
 
             {/* Pricing Section */}
             <section id="pricing" className="py-24 bg-[#01040f]">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-                    <h2 className="text-4xl font-bold text-white mb-6 tracking-tight">Pricing</h2>
-                    <p className="text-slate-500 mb-20 uppercase tracking-widest text-xs font-bold">
-                        Global Scale. Simple Rates.
-                    </p>
+                    <ScrollReveal variant="slide-up" className="mb-20">
+                        <h2 className="text-4xl font-bold text-white mb-6 tracking-tight">Pricing</h2>
+                        <p className="text-slate-500 uppercase tracking-widest text-xs font-bold">
+                            Global Scale. Simple Rates.
+                        </p>
+                    </ScrollReveal>
 
                     <div className="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto">
                         {/* Free Tier */}
