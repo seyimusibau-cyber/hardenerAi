@@ -407,7 +407,7 @@ export default function Home() {
             </nav>
 
             {/* Hero Section */}
-            <section className="relative pt-32 pb-16 px-4 overflow-hidden min-h-[75vh] flex flex-col justify-center items-center">
+            <section className="relative pt-24 sm:pt-32 pb-12 sm:pb-16 px-4 min-h-fit sm:min-h-[75vh] flex flex-col justify-center items-center">
                 <Hero3DBackground />
                 <ScrollReveal variant="flip-up" className="relative z-10 max-w-4xl mx-auto text-center space-y-6 w-full">
                     <h1 className="text-4xl sm:text-6xl md:text-7xl font-black tracking-tight text-white leading-tight">

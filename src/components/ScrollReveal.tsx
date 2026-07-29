@@ -52,23 +52,23 @@ export default function ScrollReveal({
   const getInitialTransform = () => {
     switch (variant) {
       case "flip-up":
-        return "perspective(1000px) rotateX(25deg) translateY(70px) scale(0.95)";
+        return "perspective(1000px) rotateX(12deg) translateY(35px) scale(0.97)";
       case "cyber-skew":
-        return "skewX(-8deg) translateX(-50px) translateY(30px) scale(0.96)";
+        return "skewX(-4deg) translateX(-30px) translateY(20px) scale(0.98)";
       case "3d-zoom":
-        return "perspective(1000px) translateZ(-120px) translateY(40px) scale(0.9)";
+        return "perspective(1000px) translateZ(-80px) translateY(25px) scale(0.94)";
       case "slide-up":
-        return "translateY(70px) scale(0.97)";
+        return "translateY(45px) scale(0.98)";
       case "slide-down":
-        return "translateY(-70px) scale(0.97)";
+        return "translateY(-45px) scale(0.98)";
       case "slide-left":
-        return "translateX(80px) rotate(2deg)";
+        return "translateX(45px)";
       case "slide-right":
-        return "translateX(-80px) rotate(-2deg)";
+        return "translateX(-45px)";
       case "zoom-in":
-        return "scale(0.88)";
+        return "scale(0.92)";
       default:
-        return "perspective(1000px) rotateX(25deg) translateY(70px) scale(0.95)";
+        return "perspective(1000px) rotateX(12deg) translateY(35px) scale(0.97)";
     }
   };
 
