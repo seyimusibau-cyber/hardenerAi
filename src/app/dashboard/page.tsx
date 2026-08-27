@@ -909,6 +909,9 @@ function ScanDetailModal({ scan, onClose }: { scan: ScanRecord; onClose: () => v
                             </div>
                         )}
                     </div>
+
+                    {/* AI-verified findings (per-finding, from the scanner worker) */}
+                    {scan.status === 'Completed' && <FindingsPanel scanId={scan.id} />}
                 </div>
 
                 {/* Footer */}
@@ -921,6 +924,106 @@ function ScanDetailModal({ scan, onClose }: { scan: ScanRecord; onClose: () => v
                     </button>
                 </div>
             </div>
+        </div>
+    );
+}
+
+// --- AI-verified findings panel (Phase 1 UI) -------------------------------
+interface FindingRow {
+    id: string;
+    rule_id: string | null;
+    severity: string | null;
+    file_path: string | null;
+    start_line: number | null;
+    message: string | null;
+    reasoning: string | null;
+    unified_diff: string | null;
+    unit_test: string | null;
+    is_vulnerability: boolean;
+    patch_applies: boolean;
+    patch_validated: boolean;
+}
+
+function FindingsPanel({ scanId }: { scanId: string }) {
+    const [findings, setFindings] = useState<FindingRow[] | null>(null);
+    const [summary, setSummary] = useState<{ confirmed: number; false_positives: number; patches_validated: number } | null>(null);
+    const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        let alive = true;
+        (async () => {
+            try {
+                const res = await fetch(`/api/findings?scanId=${encodeURIComponent(scanId)}`);
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || "Failed to load findings");
+                if (alive) { setFindings(data.findings); setSummary(data.summary); }
+            } catch (e: any) {
+                if (alive) setError(e.message);
+            }
+        })();
+        return () => { alive = false; };
+    }, [scanId]);
+
+    return (
+        <div className="space-y-3">
+            <div className="flex items-center justify-between">
+                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider font-mono">AI-Verified Findings</h3>
+                {summary && (
+                    <div className="flex gap-2 text-[10px] font-mono">
+                        <span className="px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-400 border border-rose-500/20">{summary.confirmed} confirmed</span>
+                        <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700">{summary.false_positives} false-positive</span>
+                        <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">{summary.patches_validated} patch verified</span>
+                    </div>
+                )}
+            </div>
+
+            {error && <div className="text-rose-400 text-xs font-mono py-4">{error}</div>}
+            {!findings && !error && <div className="text-slate-500 text-xs font-mono py-8 text-center animate-pulse">Loading findings…</div>}
+            {findings && findings.length === 0 && (
+                <div className="text-slate-500 text-xs text-center py-12 border border-dashed border-slate-800 rounded-xl bg-slate-950/20 font-mono">
+                    No findings recorded for this scan.
+                </div>
+            )}
+            {findings?.map((f) => <FindingCard key={f.id} f={f} />)}
+        </div>
+    );
+}
+
+function FindingCard({ f }: { f: FindingRow }) {
+    const [open, setOpen] = useState(false);
+    const sev = (f.severity || "note").toLowerCase();
+    const sevColor = sev === "error" ? "text-rose-400 border-rose-500/20 bg-rose-500/10"
+        : sev === "warning" ? "text-amber-400 border-amber-500/20 bg-amber-500/10"
+        : "text-slate-400 border-slate-700 bg-slate-800";
+    return (
+        <div className={`border rounded-xl overflow-hidden ${f.is_vulnerability ? "border-slate-800" : "border-slate-850 opacity-70"}`}>
+            <button onClick={() => setOpen(!open)} className="w-full flex items-center gap-3 p-3 text-left hover:bg-slate-950/40 transition-colors">
+                <span className={`text-[9px] font-mono uppercase px-1.5 py-0.5 rounded border ${sevColor}`}>{sev}</span>
+                <span className="flex-1 min-w-0">
+                    <span className="text-xs text-white font-mono truncate block">{f.rule_id || "finding"}</span>
+                    <span className="text-[10px] text-slate-500 font-mono truncate block">{f.file_path}{f.start_line ? `:${f.start_line}` : ""}</span>
+                </span>
+                {f.is_vulnerability
+                    ? <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-400 border border-rose-500/20">CONFIRMED</span>
+                    : <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-500 border border-slate-700">FALSE POSITIVE</span>}
+                {f.patch_validated && <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">PATCH VERIFIED</span>}
+                {f.patch_applies && !f.patch_validated && <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">PATCH APPLIES</span>}
+            </button>
+            {open && (
+                <div className="px-3 pb-3 space-y-3 border-t border-slate-850 bg-slate-950/30">
+                    {f.reasoning && <p className="text-[11px] text-slate-400 leading-relaxed pt-3">{f.reasoning}</p>}
+                    {f.unified_diff && (
+                        <div>
+                            <span className="text-[9px] uppercase tracking-widest text-slate-500 font-bold font-mono">Remediation diff</span>
+                            <pre className="mt-1 text-[10px] leading-relaxed bg-slate-950 border border-slate-800 rounded-lg p-3 overflow-x-auto font-mono">
+                                {f.unified_diff.split("\n").map((ln, i) => (
+                                    <div key={i} className={ln.startsWith("+") && !ln.startsWith("+++") ? "text-emerald-400" : ln.startsWith("-") && !ln.startsWith("---") ? "text-rose-400" : "text-slate-400"}>{ln}</div>
+                                ))}
+                            </pre>
+                        </div>
+                    )}
+                </div>
+            )}
         </div>
     );
 }

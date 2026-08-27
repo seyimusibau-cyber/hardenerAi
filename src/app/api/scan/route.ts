@@ -90,6 +90,20 @@ export async function POST(request: Request) {
             }, { status: 402 });
         }
 
+        // 2c. Concurrency cap (Phase 2): don't let one user flood the scanner
+        // fleet. Count their in-flight scans and refuse past the limit.
+        const MAX_CONCURRENT = profile?.role === 'admin' ? 25 : 3;
+        const { count: inflight } = await supabase
+            .from('scans')
+            .select('id', { count: 'exact', head: true })
+            .eq('user_id', user.id)
+            .in('status', ['Queued', 'Running']);
+        if ((inflight ?? 0) >= MAX_CONCURRENT) {
+            return NextResponse.json({
+                error: `Too many scans in progress (${inflight}/${MAX_CONCURRENT}). Wait for one to finish.`,
+            }, { status: 429 });
+        }
+
         // 3. Queue the Scan
         const { data: scan, error: scanError } = await supabase.from('scans').insert({
             user_id: user.id,
