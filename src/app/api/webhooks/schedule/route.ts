@@ -1,3 +1,4 @@
+import { handleError } from '@/lib/error-handler';
 import { NextResponse } from 'next/server';
 import { Receiver } from '@upstash/qstash';
 import { Client } from '@upstash/qstash';
@@ -47,8 +48,8 @@ export async function POST(req: Request) {
             dispatched++;
         }
         return NextResponse.json({ success: true, dispatched });
-    } catch (err: any) {
+    } catch (err) {
         console.error('Schedule cron error:', err);
-        return NextResponse.json({ error: err.message }, { status: 500 });
+        return handleError(err);
     }
 }

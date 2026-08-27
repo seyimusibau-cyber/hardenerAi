@@ -16,7 +16,8 @@ const {
   APP_URL, NOTIFY_SECRET,
 } = process.env;
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, { auth: { persistSession: false } });
+const DRY = process.env.DRY_RUN === "1";  // local verification: no Supabase/Fly needed
+const supabase = DRY ? null : createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, { auth: { persistSession: false } });
 const started = Date.now();
 
 // Global wall-clock guard: a runaway scan marks itself Failed rather than
@@ -35,6 +36,7 @@ function fingerprint(ruleId, file, snippet) {
 
 // Cross-scan cache: reuse a prior AI verdict for identical code (cost control).
 async function cachedVerify(fp, snippet, sarif, verify) {
+  if (DRY) return verify(snippet, sarif);
   const { data: hit } = await supabase.from("finding_cache").select("verdict").eq("fingerprint", fp).maybeSingle();
   if (hit?.verdict) {
     await supabase.rpc("increment_cache_hit", { fp }).catch(() => {});
@@ -48,6 +50,7 @@ async function cachedVerify(fp, snippet, sarif, verify) {
 }
 
 async function setScan(fields) {
+  if (DRY) { if (fields.status || fields.progress === 100) console.log(`[dry] scan:`, JSON.stringify(fields)); return; }
   await supabase.from("scans").update({ ...fields, updated_at: new Date().toISOString() }).eq("id", SCAN_ID);
 }
 
@@ -56,7 +59,7 @@ function grade(score) {
 }
 
 async function main() {
-  if (!SCAN_ID || !TARGET_URL) throw new Error("missing SCAN_ID or TARGET_URL");
+  if (!TARGET_URL || (!DRY && !SCAN_ID)) throw new Error("missing SCAN_ID or TARGET_URL");
   await setScan({ status: "Running", progress: 5 });
 
   const targetType = classifyTarget(TARGET_URL); // "git" | "web"
@@ -117,7 +120,12 @@ async function main() {
       await setScan({ progress: 30 + Math.round((60 * (i + 1)) / results.length) });
     }
 
-    if (rows.length) {
+    if (DRY) {
+      console.log(JSON.stringify({ total, confirmed, findings: rows }, null, 2));
+    } else if (rows.length) {
+      // Idempotent: a QStash retry re-runs this scan; clear prior rows first so
+      // findings aren't double-inserted.
+      await supabase.from("findings").delete().eq("scan_id", SCAN_ID);
       const { error } = await supabase.from("findings").insert(rows);
       if (error) throw new Error(`findings insert failed: ${error.message}`);
     }

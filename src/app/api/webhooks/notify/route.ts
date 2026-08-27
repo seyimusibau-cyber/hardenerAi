@@ -1,3 +1,4 @@
+import { handleError } from '@/lib/error-handler';
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { sendSlack, sendEmail, scanAlert } from '@/lib/notifier';
@@ -32,8 +33,8 @@ export async function POST(req: Request) {
             if (s.notify_email && await sendEmail(s.notify_email, `Hardener scan: ${scan.target_url}`, `<pre>${text}</pre>`)) sent++;
         }
         return NextResponse.json({ success: true, sent });
-    } catch (err: any) {
+    } catch (err) {
         console.error('Notify error:', err);
-        return NextResponse.json({ error: err.message }, { status: 500 });
+        return handleError(err);
     }
 }

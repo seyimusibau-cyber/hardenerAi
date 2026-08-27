@@ -1,3 +1,4 @@
+import { handleError } from '@/lib/error-handler';
 import { NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { parseDiffPath, applyUnifiedDiff } from '@/lib/apply-diff';
@@ -37,13 +38,14 @@ export async function POST(request: Request) {
         const { findingId } = await request.json();
         const { data: finding } = await supabase.from('findings').select('*, scans!inner(user_id, target_url)')
             .eq('id', findingId).single();
-        if (!finding || (finding as any).scans.user_id !== user.id) {
+        const fscan = (finding as { scans?: { user_id: string; target_url: string } } | null)?.scans;
+        if (!finding || fscan?.user_id !== user.id) {
             return NextResponse.json({ error: 'Not found' }, { status: 404 });
         }
         const diff = finding.unified_diff;
         if (!diff) return NextResponse.json({ error: 'Finding has no remediation diff' }, { status: 400 });
 
-        const repo = parseRepo((finding as any).scans.target_url);
+        const repo = parseRepo(fscan!.target_url);
         if (!repo) return NextResponse.json({ error: 'Target is not a GitHub repo' }, { status: 400 });
 
         // Base branch + latest commit/tree
@@ -78,8 +80,8 @@ export async function POST(request: Request) {
                     });
                     applied = true;
                 }
-            } catch (e: any) {
-                console.error('[pr] diff apply failed, attaching instead:', e.message);
+            } catch (e) {
+                console.error('[pr] diff apply failed, attaching instead:', e);
             }
         }
 
@@ -108,8 +110,8 @@ export async function POST(request: Request) {
             finding_id: findingId, user_id: user.id, pr_url: pr.html_url, pr_number: pr.number, status: 'open',
         });
         return NextResponse.json({ pr_url: pr.html_url, pr_number: pr.number, auto_applied: applied });
-    } catch (err: any) {
+    } catch (err) {
         console.error('PR route error:', err);
-        return NextResponse.json({ error: err.message }, { status: 500 });
+        return handleError(err);
     }
 }

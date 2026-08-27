@@ -1,3 +1,4 @@
+import { handleError } from '@/lib/error-handler';
 import { NextResponse, NextRequest } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { rateLimit } from '@/lib/rate-limiter';
@@ -138,7 +139,7 @@ export async function POST(request: Request) {
 
     } catch (err: any) {
         console.error('Scan API error:', err);
-        return NextResponse.json({ error: err.message }, { status: 500 });
+        return handleError(err);
     }
 }
 
@@ -237,6 +238,6 @@ export async function GET(request: Request) {
         });
 
     } catch (err: any) {
-        return NextResponse.json({ error: err.message || 'Audit request failed' }, { status: 500 });
+        return handleError(err);
     }
 }

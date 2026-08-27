@@ -1,3 +1,4 @@
+import { handleError } from '@/lib/error-handler';
 import { NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import crypto from 'crypto';
@@ -74,6 +75,6 @@ export async function POST(req: Request) {
 
         return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
     } catch (err: any) {
-        return NextResponse.json({ error: err.message }, { status: 500 });
+        return handleError(err);
     }
 }
