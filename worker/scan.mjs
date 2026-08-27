@@ -2,7 +2,8 @@
 // Flow: clone -> Semgrep -> (per finding) AI verify -> validate patch -> persist.
 // Runs as an ephemeral Fly.io machine; auto-destroyed after exit.
 import { createClient } from "@supabase/supabase-js";
-import { classifyTarget, cloneRepo, detectLanguage, runSemgrep, runGitleaks, extractSnippet } from "./sources.mjs";
+import { classifyTarget, cloneRepo, detectLanguage, runSemgrep, runGitleaks, runOsvScanner, runNuclei, extractSnippet } from "./sources.mjs";
+import { createHash } from "node:crypto";
 import { verifyFinding } from "./verifier.mjs";
 import { validatePatch } from "./validate.mjs";
 import { rmSync } from "node:fs";
@@ -11,10 +12,40 @@ const {
   SCAN_ID, TARGET_URL,
   SUPABASE_URL, SUPABASE_SERVICE_KEY,
   MAX_FINDINGS = "25",
+  SCAN_TIMEOUT_MS = "1500000",
+  APP_URL, NOTIFY_SECRET,
 } = process.env;
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, { auth: { persistSession: false } });
 const started = Date.now();
+
+// Global wall-clock guard: a runaway scan marks itself Failed rather than
+// hanging the machine forever (Phase 2: timeout caps).
+const killer = setTimeout(async () => {
+  console.error(`[scan ${SCAN_ID}] exceeded ${SCAN_TIMEOUT_MS}ms`);
+  try { await setScan({ status: "Failed", progress: 100, error_message: "Scan exceeded time budget." }); } catch {}
+  process.exit(1);
+}, Number(SCAN_TIMEOUT_MS));
+killer.unref();
+
+function fingerprint(ruleId, file, snippet) {
+  const norm = (snippet || "").replace(/\s+/g, " ").trim();
+  return createHash("sha256").update(`${ruleId}|${file}|${norm}`).digest("hex");
+}
+
+// Cross-scan cache: reuse a prior AI verdict for identical code (cost control).
+async function cachedVerify(fp, snippet, sarif, verify) {
+  const { data: hit } = await supabase.from("finding_cache").select("verdict").eq("fingerprint", fp).maybeSingle();
+  if (hit?.verdict) {
+    await supabase.rpc("increment_cache_hit", { fp }).catch(() => {});
+    return { ...hit.verdict, _cached: true };
+  }
+  const v = await verify(snippet, sarif);
+  if (!v._verify_error) {
+    await supabase.from("finding_cache").upsert({ fingerprint: fp, verdict: v }, { onConflict: "fingerprint" }).catch(() => {});
+  }
+  return v;
+}
 
 async function setScan(fields) {
   await supabase.from("scans").update({ ...fields, updated_at: new Date().toISOString() }).eq("id", SCAN_ID);
@@ -28,36 +59,42 @@ async function main() {
   if (!SCAN_ID || !TARGET_URL) throw new Error("missing SCAN_ID or TARGET_URL");
   await setScan({ status: "Running", progress: 5 });
 
-  if (classifyTarget(TARGET_URL) !== "git") {
-    // Phase 0 is SAST-only. Live-URL DAST is Phase 2.
-    await setScan({ status: "Failed", progress: 100,
-      error_message: "Only git repositories are supported in this version (DAST is on the roadmap)." });
-    return;
-  }
-
+  const targetType = classifyTarget(TARGET_URL); // "git" | "web"
   let repoDir;
   try {
     await setScan({ progress: 15 });
-    repoDir = cloneRepo(TARGET_URL);
-    const language = detectLanguage(repoDir);
+    let results, total, language;
 
-    await setScan({ progress: 30 });
-    let results = [...runSemgrep(repoDir), ...runGitleaks(repoDir)];
-    const total = results.length;
+    if (targetType === "git") {
+      repoDir = cloneRepo(TARGET_URL);
+      language = detectLanguage(repoDir);
+      await setScan({ progress: 30 });
+      results = [...runSemgrep(repoDir), ...runGitleaks(repoDir), ...runOsvScanner(repoDir)];
+    } else {
+      // Live-URL DAST (experimental). No code to patch, so patch validation is skipped.
+      language = "web";
+      await setScan({ progress: 30 });
+      results = runNuclei(TARGET_URL);
+    }
+
+    total = results.length;
     results = results.slice(0, Number(MAX_FINDINGS)); // cost + latency cap
 
     let confirmed = 0, patchHours = 0;
     const rows = [];
     for (let i = 0; i < results.length; i++) {
       const r = results[i];
-      const { file, line, snippet } = extractSnippet(repoDir, r);
+      const { file, line, snippet } = repoDir
+        ? extractSnippet(repoDir, r)
+        : { file: TARGET_URL, line: null, snippet: r.message?.text || "" };
       const sarif = {
         rule_id: r.ruleId, level: r.level,
         message: r.message?.text, file, line,
       };
-      const v = await verifyFinding(snippet, sarif);
+      const fp = fingerprint(r.ruleId, file, snippet);
+      const v = await cachedVerify(fp, snippet, sarif, verifyFinding);
       let applied = false, validated = false;
-      if (v.is_vulnerability && v.unified_diff) {
+      if (repoDir && v.is_vulnerability && v.unified_diff) {
         ({ applied, validated } = validatePatch(repoDir, v.unified_diff, v.unit_test, language));
       }
       if (v.is_vulnerability) { confirmed++; patchHours += v.estimated_patch_hours || 0; }
@@ -108,6 +145,17 @@ async function main() {
       checks: { semgrep_total: total, verified: confirmed, patches_validated: validatedCount },
     });
     console.log(`[scan ${SCAN_ID}] done: ${confirmed}/${total} confirmed, ${validatedCount} patches validated`);
+
+    // Best-effort completion alert (scheduled scans with a Slack/email sink).
+    if (APP_URL && NOTIFY_SECRET) {
+      try {
+        await fetch(`${APP_URL}/api/webhooks/notify`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-hardener-secret": NOTIFY_SECRET },
+          body: JSON.stringify({ scanId: SCAN_ID }),
+        });
+      } catch (e) { console.error(`[notify] ${e?.message}`); }
+    }
   } finally {
     if (repoDir) { try { rmSync(repoDir, { recursive: true, force: true }); } catch {} }
   }

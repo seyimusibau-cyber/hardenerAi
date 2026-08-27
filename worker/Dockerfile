@@ -18,6 +18,17 @@ ARG GITLEAKS_VERSION=8.18.4
 RUN curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
       | tar -xz -C /usr/local/bin gitleaks
 
+# osv-scanner (SCA / dependency vulns), pinned
+ARG OSV_VERSION=1.9.1
+RUN curl -sSfL "https://github.com/google/osv-scanner/releases/download/v${OSV_VERSION}/osv-scanner_linux_amd64" \
+      -o /usr/local/bin/osv-scanner && chmod +x /usr/local/bin/osv-scanner
+
+# nuclei (experimental DAST for live URLs), pinned
+ARG NUCLEI_VERSION=3.3.5
+RUN curl -sSfL "https://github.com/projectdiscovery/nuclei/releases/download/v${NUCLEI_VERSION}/nuclei_${NUCLEI_VERSION}_linux_amd64.zip" \
+      -o /tmp/nuclei.zip && cd /usr/local/bin && (command -v unzip >/dev/null || (apt-get update && apt-get install -y unzip)) \
+      && unzip -o /tmp/nuclei.zip nuclei && rm /tmp/nuclei.zip
+
 WORKDIR /app
 COPY package.json ./
 RUN npm install --omit=dev

@@ -91,3 +91,36 @@ export function runGitleaks(repoDir) {
     return sarif.runs?.[0]?.results ?? [];
   } catch { return []; }
 }
+
+// osv-scanner — dependency/SCA vulnerabilities from lockfiles. SARIF out,
+// normalized into the shared result shape.
+export function runOsvScanner(repoDir) {
+  const out = join(mkdtempSync(join(tmpdir(), "hardener-osv-")), "osv.sarif");
+  try {
+    run("osv-scanner", ["scan", "--format", "sarif", "--output", out, "-r", repoDir],
+        { cwd: repoDir, timeout: 300_000 });
+  } catch (err) {
+    if (!existsSync(out)) { console.error(`[osv] ${err?.message?.split("\n")[0]}`); return []; }
+  }
+  if (!existsSync(out)) return [];
+  try {
+    const sarif = JSON.parse(readFileSync(out, "utf8"));
+    return sarif.runs?.[0]?.results ?? [];
+  } catch { return []; }
+}
+
+// DAST for live URLs (Phase 2, experimental). Uses nuclei if present in the
+// image. Returns results in the shared shape. Kept behind classifyTarget so it
+// only runs for "web" targets. A full crawler + ZAP active scan is future work.
+export function runNuclei(targetUrl) {
+  const out = join(mkdtempSync(join(tmpdir(), "hardener-dast-")), "nuclei.sarif");
+  try {
+    run("nuclei", ["-u", targetUrl, "-silent", "-sarif-export", out, "-timeout", "10"],
+        { timeout: 600_000 });
+  } catch (err) {
+    if (!existsSync(out)) { console.error(`[nuclei] ${err?.message?.split("\n")[0]}`); return []; }
+  }
+  if (!existsSync(out)) return [];
+  try { return JSON.parse(readFileSync(out, "utf8")).runs?.[0]?.results ?? []; }
+  catch { return []; }
+}
