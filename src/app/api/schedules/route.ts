@@ -1,3 +1,4 @@
+import { handleError } from '@/lib/error-handler';
 import { NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 
@@ -25,7 +26,7 @@ export async function POST(request: Request) {
         notify_slack_webhook: notifySlackWebhook || null,
         notify_email: notifyEmail || null,
     }).select().single();
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) return handleError(error);
     return NextResponse.json({ schedule: data }, { status: 201 });
 }
 

@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  app:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Typecheck
+        run: npx tsc --noEmit -p tsconfig.json
+      - name: Lint
+        # Non-blocking: ~14 pre-existing `catch (err: any)` violations to burn
+        # down. New code is kept clean; flip to blocking once the backlog is gone.
+        continue-on-error: true
+        run: npm run lint
+      - name: Unit tests
+        run: npm test
+
+  worker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Worker unit tests
+        working-directory: worker
+        run: |
+          npm install
+          npm test
+      # Builds the scanner image so pinned Semgrep/Gitleaks/osv/nuclei download
+      # URLs are validated on every PR — the failure mode you'd otherwise only
+      # hit on a paid Fly deploy.
+      - name: Build scanner image
+        working-directory: worker
+        run: docker build -t hardener-scanner:ci .

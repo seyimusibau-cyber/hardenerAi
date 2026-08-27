@@ -7,7 +7,9 @@
   "main": "scan.mjs",
   "scripts": {
     "start": "node scan.mjs",
-    "check": "node --check scan.mjs && node --check verifier.mjs && node --check validate.mjs && node --check sources.mjs"
+    "check": "node --check scan.mjs && node --check verifier.mjs && node --check validate.mjs && node --check sources.mjs",
+    "scan:local": "DRY_RUN=1 node scan.mjs",
+    "test": "node --test test/*.test.mjs"
   },
   "dependencies": {
     "@google/generative-ai": "^0.21.0",

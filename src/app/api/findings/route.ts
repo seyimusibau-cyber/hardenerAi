@@ -1,3 +1,4 @@
+import { handleError } from '@/lib/error-handler';
 import { NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 
@@ -37,8 +38,8 @@ export async function GET(request: Request) {
                 patches_validated: findings?.filter(f => f.patch_validated).length ?? 0,
             },
         });
-    } catch (err: any) {
+    } catch (err) {
         console.error('Findings API error:', err);
-        return NextResponse.json({ error: err.message }, { status: 500 });
+        return handleError(err);
     }
 }

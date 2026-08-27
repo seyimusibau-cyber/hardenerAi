@@ -1,3 +1,4 @@
+import { handleError } from '@/lib/error-handler';
 import { NextResponse } from 'next/server';
 import { Receiver } from '@upstash/qstash';
 import { createClient } from '@supabase/supabase-js';
@@ -89,6 +90,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: true });
   } catch (err: any) {
     console.error('QStash Webhook Error:', err);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return handleError(err);
   }
 }

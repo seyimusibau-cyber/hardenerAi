@@ -17,7 +17,7 @@ export async function GET(request: Request) {
     const { data: findings } = await supabase.from('findings').select('*')
         .eq('scan_id', scanId).order('is_vulnerability', { ascending: false });
 
-    const esc = (s: any) => String(s ?? '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c] as string));
+    const esc = (s: unknown) => String(s ?? '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c] as string));
     const confirmed = (findings ?? []).filter(f => f.is_vulnerability);
     const rows = (findings ?? []).map(f => `
         <div class="finding ${f.is_vulnerability ? 'vuln' : 'fp'}">
