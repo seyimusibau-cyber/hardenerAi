@@ -1,0 +1,16 @@
+{
+  "name": "hardener-scanner",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Ephemeral Fly.io worker: Semgrep -> AI verify -> validate patch -> write findings.",
+  "main": "scan.mjs",
+  "scripts": {
+    "start": "node scan.mjs",
+    "check": "node --check scan.mjs && node --check verifier.mjs && node --check validate.mjs && node --check sources.mjs"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.21.0",
+    "@supabase/supabase-js": "^2.45.0"
+  }
+}

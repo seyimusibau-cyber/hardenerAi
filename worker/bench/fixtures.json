@@ -1,0 +1,10 @@
+[
+  { "label": true,  "snippet": "def run(cmd):\n    import os\n    os.system(cmd)  # user-controlled",
+    "sarif": { "rule_id": "python.lang.security.audit.dangerous-os-system", "message": "OS command injection", "level": "error" } },
+  { "label": true,  "snippet": "query = \"SELECT * FROM users WHERE id = \" + req.params.id\ndb.query(query)",
+    "sarif": { "rule_id": "js.sql-injection", "message": "SQL injection via string concat", "level": "error" } },
+  { "label": false, "snippet": "def run(cmd):\n    ALLOWED = {'ls','pwd'}\n    if cmd not in ALLOWED: raise ValueError()\n    import subprocess; subprocess.run([cmd], shell=False)",
+    "sarif": { "rule_id": "python.lang.security.audit.subprocess", "message": "Possible command injection", "level": "warning" } },
+  { "label": false, "snippet": "const id = Number(req.params.id)\nif (!Number.isInteger(id)) return res.status(400).end()\ndb.query('SELECT * FROM users WHERE id = $1', [id])",
+    "sarif": { "rule_id": "js.sql-injection", "message": "Possible SQL injection", "level": "warning" } }
+]

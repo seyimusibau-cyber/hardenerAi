@@ -36,11 +36,12 @@ export async function verifyAndPatchFinding(codeSnippet: string, sarifFinding: o
       responseMimeType: "application/json",
       responseSchema: responseSchema,
     },
+    // Only DANGEROUS_CONTENT is relaxed, because vulnerability descriptions
+    // (exploits, injections) legitimately trip it during security analysis. The
+    // other categories stay at Gemini's defaults — blanket BLOCK_NONE was
+    // unnecessary and looks bad under audit.
     safetySettings: [
-      { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-      { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-      { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
-      { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+      { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
     ],
   });
 

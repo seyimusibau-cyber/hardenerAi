@@ -1,0 +1,14 @@
+# Fly.io app config for the ephemeral scanner. Machines are created on-demand by
+# the qstash webhook (auto_destroy=true), so no always-on service is defined.
+app = "hardener-scanner"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+# No [http_service] / [[services]] — this app runs as short-lived machines
+# spawned per scan via the Machines API, not as a served process.
+
+[[vm]]
+  size = "shared-cpu-2x"
+  memory = "2gb"
