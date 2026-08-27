@@ -39,8 +39,20 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: 'Missing scan payload' }, { status: 400 });
     }
 
-    // Update scan status to 'Running'
-    await supabaseAdmin.from('scans').update({ status: 'Running' }).eq('id', scanId);
+    // Idempotency: QStash retries on non-2xx. Only a still-Queued scan may be
+    // started, so a retry after we've already begun doesn't spawn a second
+    // machine or double-process. The status flip also acts as the claim.
+    const { data: claimed } = await supabaseAdmin
+        .from('scans')
+        .update({ status: 'Running' })
+        .eq('id', scanId)
+        .eq('status', 'Queued')
+        .select('id')
+        .maybeSingle();
+
+    if (!claimed) {
+        return NextResponse.json({ success: true, skipped: 'already processed' });
+    }
 
     // 3. Trigger Fly.io Machine (Ephemeral Docker Worker)
     // The worker will pull the code/target, run Semgrep/Gitleaks/Nmap, and write SARIF to Supabase Storage.
@@ -57,11 +69,14 @@ export async function POST(req: Request) {
             body: JSON.stringify({
                 config: {
                     image: 'registry.fly.io/hardener-scanner:latest',
+                    // Only per-scan vars are passed here. Static secrets
+                    // (GEMINI_API_KEY, SUPABASE_URL, SUPABASE_SERVICE_KEY) are
+                    // set once as Fly app secrets and inherited by the machine,
+                    // so the service-role key never travels in this payload.
+                    //   fly secrets set GEMINI_API_KEY=... SUPABASE_URL=... SUPABASE_SERVICE_KEY=...
                     env: {
                         SCAN_ID: scanId,
                         TARGET_URL: targetUrl,
-                        SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
-                        SUPABASE_SERVICE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
                     },
                     auto_destroy: true, // Machine deletes itself after exit
                 }

@@ -67,9 +67,27 @@ export async function POST(request: Request) {
             .single();
 
         if (!verification) {
-            return NextResponse.json({ 
-                error: 'Domain not verified. You must verify ownership of this domain before scanning.' 
+            return NextResponse.json({
+                error: 'Domain not verified. You must verify ownership of this domain before scanning.'
             }, { status: 403 });
+        }
+
+        // 2b. Quota enforcement (Phase 3). Plan limits live on the profile; the
+        // schema tracked them but nothing consumed them until now.
+        const PLAN_LIMITS: Record<string, number> = { Free: 5, Pro: 100, Enterprise: 100000 };
+        const { data: profile } = await supabase
+            .from('profiles')
+            .select('plan, monthly_scans_used, role')
+            .eq('id', user.id)
+            .single();
+
+        const plan = profile?.plan ?? 'Free';
+        const used = profile?.monthly_scans_used ?? 0;
+        const limit = PLAN_LIMITS[plan] ?? PLAN_LIMITS.Free;
+        if (profile?.role !== 'admin' && used >= limit) {
+            return NextResponse.json({
+                error: `Monthly scan limit reached for the ${plan} plan (${limit}). Upgrade to continue.`,
+            }, { status: 402 });
         }
 
         // 3. Queue the Scan
@@ -81,6 +99,13 @@ export async function POST(request: Request) {
         }).select().single();
 
         if (scanError) throw scanError;
+
+        // Consume one scan from the quota (admins exempt).
+        if (profile?.role !== 'admin') {
+            await supabase.from('profiles')
+                .update({ monthly_scans_used: used + 1 })
+                .eq('id', user.id);
+        }
 
         // 4. Dispatch to QStash
         await qstash.publishJSON({
