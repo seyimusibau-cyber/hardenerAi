@@ -43,7 +43,7 @@ export async function verifyAndPatchFinding(codeSnippet: string, sarifFinding: o
     safetySettings: [
       { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
     ],
-  });
+  }, { timeout: Number(process.env.GEMINI_TIMEOUT_MS || 60000) });
 
   const prompt = `
   You are the lead security reasoning engine for Hardener AI.

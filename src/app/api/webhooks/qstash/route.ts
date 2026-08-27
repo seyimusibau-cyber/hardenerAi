@@ -88,7 +88,7 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json({ success: true });
-  } catch (err: any) {
+  } catch (err) {
     console.error('QStash Webhook Error:', err);
     return handleError(err);
   }

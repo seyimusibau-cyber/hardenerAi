@@ -38,7 +38,7 @@ export async function POST(req: Request) {
         });
 
         return NextResponse.json({ url: session.url });
-    } catch (err: any) {
+    } catch (err) {
         console.error('Error creating checkout session:', err);
         return handleError(err);
     }

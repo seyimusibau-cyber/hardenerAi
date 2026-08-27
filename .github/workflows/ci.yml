@@ -18,9 +18,6 @@ jobs:
       - name: Typecheck
         run: npx tsc --noEmit -p tsconfig.json
       - name: Lint
-        # Non-blocking: ~14 pre-existing `catch (err: any)` violations to burn
-        # down. New code is kept clean; flip to blocking once the backlog is gone.
-        continue-on-error: true
         run: npm run lint
       - name: Unit tests
         run: npm test

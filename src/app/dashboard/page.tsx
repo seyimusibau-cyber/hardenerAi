@@ -186,8 +186,8 @@ export default function UserDashboard() {
             if (!res.ok) throw new Error(data.error || "Failed to generate verification token.");
             setVerificationToken(data.token);
             setVerifyingDomain(domainToVerify);
-        } catch (err: any) {
-            setDnsStatusMessage({ type: 'error', text: err.message });
+        } catch (err) {
+            setDnsStatusMessage({ type: 'error', text: err instanceof Error ? err.message : String(err) });
         } finally {
             setIsGeneratingToken(false);
         }
@@ -209,8 +209,8 @@ export default function UserDashboard() {
                 throw new Error(data.error || "TXT record not detected in DNS yet. Please allow 1-2 minutes for DNS propagation.");
             }
             setDnsStatusMessage({ type: 'success', text: `Domain '${verifyingDomain}' successfully verified! Full automated DAST scans & remediation unlocked.` });
-        } catch (err: any) {
-            setDnsStatusMessage({ type: 'error', text: err.message });
+        } catch (err) {
+            setDnsStatusMessage({ type: 'error', text: err instanceof Error ? err.message : String(err) });
         } finally {
             setIsCheckingDns(false);
         }
@@ -957,8 +957,8 @@ function FindingsPanel({ scanId }: { scanId: string }) {
                 const data = await res.json();
                 if (!res.ok) throw new Error(data.error || "Failed to load findings");
                 if (alive) { setFindings(data.findings); setSummary(data.summary); }
-            } catch (e: any) {
-                if (alive) setError(e.message);
+            } catch (e) {
+                if (alive) setError(e instanceof Error ? e.message : String(e));
             }
         })();
         return () => { alive = false; };
