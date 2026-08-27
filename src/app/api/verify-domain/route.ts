@@ -74,7 +74,7 @@ export async function POST(req: Request) {
         }
 
         return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
-    } catch (err: any) {
+    } catch (err) {
         return handleError(err);
     }
 }

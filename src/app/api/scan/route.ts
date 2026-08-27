@@ -10,7 +10,7 @@ const qstash = new Client({
 });
 
 export async function POST(request: Request) {
-    let user: any = null;
+    let user: { id: string } | null = null;
     try {
         const supabase = await createClient();
         const authResult = await supabase.auth.getUser();
@@ -137,7 +137,7 @@ export async function POST(request: Request) {
             message: 'Scan queued successfully' 
         }, { status: 202 });
 
-    } catch (err: any) {
+    } catch (err) {
         console.error('Scan API error:', err);
         return handleError(err);
     }
@@ -237,7 +237,7 @@ export async function GET(request: Request) {
             scannedAt: new Date().toISOString()
         });
 
-    } catch (err: any) {
+    } catch (err) {
         return handleError(err);
     }
 }

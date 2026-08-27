@@ -160,7 +160,7 @@ async function validateRedirectChain(url: string): Promise<{
                             chain
                         };
                     }
-                } catch (dnsError) {
+                } catch {
                     return {
                         safe: false,
                         reason: `Cannot resolve redirect hostname: ${redirectHostname}`,
@@ -174,7 +174,7 @@ async function validateRedirectChain(url: string): Promise<{
                 // No more redirects
                 break;
             }
-        } catch (error) {
+        } catch {
             // Timeout or network error - allow it (don't block legitimate slow sites)
             break;
         }
@@ -215,7 +215,7 @@ export async function validateUrlSafety(url: string): Promise<SSRFValidationResu
         try {
             const lookupResult = await lookup(hostname);
             resolvedIp = lookupResult.address;
-        } catch (dnsError) {
+        } catch {
             return {
                 safe: false,
                 reason: `Cannot resolve hostname: ${hostname}`

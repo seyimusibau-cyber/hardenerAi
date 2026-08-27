@@ -1,4 +1,6 @@
 import { handleError } from '@/lib/error-handler';
+import { rateLimit } from '@/lib/rate-limiter';
+import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { parseDiffPath, applyUnifiedDiff } from '@/lib/apply-diff';
@@ -31,6 +33,9 @@ export async function POST(request: Request) {
         const supabase = await createClient();
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+        const rl = await rateLimit(request as NextRequest, `pr:${user.id}`, 5, 60_000);
+        if (rl) return rl;
 
         const token = process.env.GITHUB_TOKEN;
         if (!token) return NextResponse.json({ error: 'GitHub integration not configured' }, { status: 501 });

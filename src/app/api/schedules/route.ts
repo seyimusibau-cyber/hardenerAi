@@ -1,3 +1,5 @@
+import type { NextRequest } from 'next/server';
+import { rateLimit } from '@/lib/rate-limiter';
 import { handleError } from '@/lib/error-handler';
 import { NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
@@ -15,6 +17,9 @@ export async function POST(request: Request) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+    const rl = await rateLimit(request as NextRequest, `sched:${user.id}`, 10, 60_000);
+    if (rl) return rl;
 
     const { targetUrl, intervalHours, notifySlackWebhook, notifyEmail } = await request.json();
     if (!targetUrl) return NextResponse.json({ error: 'targetUrl required' }, { status: 400 });
