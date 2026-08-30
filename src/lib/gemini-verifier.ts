@@ -31,7 +31,11 @@ const responseSchema: Schema = {
 
 export async function verifyAndPatchFinding(codeSnippet: string, sarifFinding: object) {
   const model = genAI.getGenerativeModel({
-    model: "gemini-2.5-flash",
+    // Configurable, and it must match worker/verifier.mjs. Pinning a model
+    // string in two places means a deprecation takes one of them out silently:
+    // the call 404s, the catch below returns is_vulnerability:false, and every
+    // finding reads as clean.
+    model: process.env.GEMINI_MODEL || "gemini-2.5-flash",
     generationConfig: {
       responseMimeType: "application/json",
       responseSchema: responseSchema,
