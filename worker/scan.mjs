@@ -83,7 +83,7 @@ async function main() {
     total = results.length;
     results = results.slice(0, Number(MAX_FINDINGS)); // cost + latency cap
 
-    let confirmed = 0, patchHours = 0;
+    let confirmed = 0, patchHours = 0, verifyErrors = 0;
     const rows = [];
     for (let i = 0; i < results.length; i++) {
       const r = results[i];
@@ -96,6 +96,12 @@ async function main() {
       };
       const fp = fingerprint(r.ruleId, file, snippet);
       const v = await cachedVerify(fp, snippet, sarif, verifyFinding);
+      // A verification that FAILED is not a verification that found nothing.
+      // verifyFinding returns is_vulnerability:false on any error, so without
+      // this counter a dead model, an invalid key or an exhausted quota reads
+      // as "no vulnerabilities" — and the scan below would hand the user a
+      // score of 100 and a grade of A produced by an AI that never answered.
+      if (v._verify_error) verifyErrors++;
       let applied = false, validated = false, why = "";
       if (repoDir && v.is_vulnerability && v.unified_diff) {
         ({ applied, validated, reason: why } =
@@ -136,6 +142,17 @@ async function main() {
       if (error) throw new Error(`findings insert failed: ${error.message}`);
     }
 
+    // If nothing could be verified, the scan learned nothing. Reporting that as
+    // a clean result is the most dangerous thing this worker could do, so it
+    // fails loudly instead and the user is told why.
+    if (total > 0 && verifyErrors === total) {
+      throw new Error(
+        `verification unavailable: all ${total} finding(s) failed to verify. ` +
+        `No security conclusion can be drawn from this scan. ` +
+        `Check GEMINI_API_KEY and that GEMINI_MODEL is a model this key can reach.`
+      );
+    }
+
     // Aggregate score: start at 100, subtract per confirmed vuln by severity.
     const penalty = rows.filter((x) => x.is_vulnerability)
       .reduce((s, x) => s + (x.severity === "error" ? 12 : x.severity === "warning" ? 6 : 3), 0);
@@ -156,13 +173,23 @@ async function main() {
       ai_remediation_diff: headline?.unified_diff || null,
       ai_unit_test: headline?.unit_test || null,
       time_taken: `${Math.round((Date.now() - started) / 1000)}s`,
-      checks: { semgrep_total: total, verified: confirmed, patches_validated: validatedCount },
+      checks: {
+        semgrep_total: total, verified: confirmed, patches_validated: validatedCount,
+        // Non-zero means some findings were never assessed, so `score` is an
+        // upper bound on the problems present, not a measurement of them.
+        verify_errors: verifyErrors,
+        score_is_partial: verifyErrors > 0,
+      },
     });
     const appliedCount = rows.filter((x) => x.patch_applies).length;
     // Reported separately on purpose: "applied" and "validated" are different
     // claims, and only the second one means the defect is actually repaired.
     console.log(`[scan ${SCAN_ID}] done: ${confirmed}/${total} confirmed, ` +
                 `${appliedCount} patches applied, ${validatedCount} proven by execution`);
+    if (verifyErrors > 0) {
+      console.warn(`[scan ${SCAN_ID}] WARNING: ${verifyErrors}/${total} finding(s) could not be ` +
+                   `verified. The score is an upper bound, not a clean bill of health.`);
+    }
 
     // Best-effort completion alert (scheduled scans with a Slack/email sink).
     if (APP_URL && NOTIFY_SECRET) {
