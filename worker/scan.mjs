@@ -96,9 +96,14 @@ async function main() {
       };
       const fp = fingerprint(r.ruleId, file, snippet);
       const v = await cachedVerify(fp, snippet, sarif, verifyFinding);
-      let applied = false, validated = false;
+      let applied = false, validated = false, why = "";
       if (repoDir && v.is_vulnerability && v.unified_diff) {
-        ({ applied, validated } = validatePatch(repoDir, v.unified_diff, v.unit_test, language));
+        ({ applied, validated, reason: why } =
+          validatePatch(repoDir, v.unified_diff, v.unit_test, language));
+        // An unproven patch is the common case, not an error. Say why, so the
+        // difference between "we could not run the test" and "the patch does
+        // not fix it" is visible rather than collapsing into a false flag.
+        if (applied && !validated) console.log(`[validate] ${file}: unproven — ${why}`);
       }
       if (v.is_vulnerability) { confirmed++; patchHours += v.estimated_patch_hours || 0; }
       rows.push({
@@ -116,6 +121,7 @@ async function main() {
         estimated_patch_hours: v.estimated_patch_hours || 0,
         patch_applies: applied,
         patch_validated: validated,
+        patch_validation_note: why || null,
       });
       await setScan({ progress: 30 + Math.round((60 * (i + 1)) / results.length) });
     }
@@ -152,7 +158,11 @@ async function main() {
       time_taken: `${Math.round((Date.now() - started) / 1000)}s`,
       checks: { semgrep_total: total, verified: confirmed, patches_validated: validatedCount },
     });
-    console.log(`[scan ${SCAN_ID}] done: ${confirmed}/${total} confirmed, ${validatedCount} patches validated`);
+    const appliedCount = rows.filter((x) => x.patch_applies).length;
+    // Reported separately on purpose: "applied" and "validated" are different
+    // claims, and only the second one means the defect is actually repaired.
+    console.log(`[scan ${SCAN_ID}] done: ${confirmed}/${total} confirmed, ` +
+                `${appliedCount} patches applied, ${validatedCount} proven by execution`);
 
     // Best-effort completion alert (scheduled scans with a Slack/email sink).
     if (APP_URL && NOTIFY_SECRET) {
