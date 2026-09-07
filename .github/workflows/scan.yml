@@ -1,0 +1,98 @@
+# The free scan runner.
+#
+# Vercel cannot be the scanner: Semgrep is a binary and a real scan outruns the
+# function timeout. Fly costs money. Targets are GitHub repos, so a hosted
+# runner already has git, Node and 2000 free minutes a month -- which makes
+# Vercel + Actions + Supabase + QStash a working $0 stack.
+#
+# Dispatched by src/lib/runner.ts (RUNNER=github). Versions are pinned to match
+# worker/Dockerfile so a scan here and a scan on Fly see the same scanners.
+name: scan
+
+on:
+  workflow_dispatch:
+    inputs:
+      scan_id:
+        description: Scan row id in Supabase
+        required: true
+      target_url:
+        description: Repository or URL to scan
+        required: true
+
+# Two scans of different targets may run at once; two dispatches of the SAME
+# scan must not, or both write findings for one scan_id.
+concurrency:
+  group: scan-${{ inputs.scan_id }}
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install scanners (pinned to worker/Dockerfile)
+        env:
+          GITLEAKS_VERSION: 8.18.4
+          OSV_VERSION: 1.9.1
+        run: |
+          set -euo pipefail
+          pip install --no-cache-dir semgrep==1.90.0 pytest==8.3.3
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+            | sudo tar -xz -C /usr/local/bin gitleaks
+          sudo curl -sSfL "https://github.com/google/osv-scanner/releases/download/v${OSV_VERSION}/osv-scanner_linux_amd64" \
+            -o /usr/local/bin/osv-scanner
+          sudo chmod +x /usr/local/bin/osv-scanner
+
+      - name: Install worker deps
+        working-directory: worker
+        run: npm ci --omit=dev || npm install --omit=dev
+
+      # `git apply --3way` and the stash/reset cycle in validate.mjs both need
+      # an identity configured.
+      - name: Configure git identity for patch validation
+        run: |
+          git config --global user.email "worker@hardener.ai"
+          git config --global user.name "Hardener Worker"
+          git config --global init.defaultBranch main
+
+      - name: Run scan
+        working-directory: worker
+        env:
+          SCAN_ID: ${{ inputs.scan_id }}
+          TARGET_URL: ${{ inputs.target_url }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: ${{ vars.GEMINI_MODEL }}
+          MAX_FINDINGS: ${{ vars.MAX_FINDINGS }}
+          APP_URL: ${{ vars.APP_URL }}
+          NOTIFY_SECRET: ${{ secrets.NOTIFY_SECRET }}
+        run: node scan.mjs
+
+      # scan.mjs marks the row Failed on its own error path, but it cannot do
+      # that if the job dies first (timeout, cancelled, runner OOM). Without
+      # this the scan sits at Running forever -- the exact state the pluggable
+      # runner exists to prevent.
+      - name: Mark the scan failed if the job did not finish
+        if: failure() || cancelled()
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          SCAN_ID: ${{ inputs.scan_id }}
+        run: |
+          curl -sS -X PATCH \
+            "${SUPABASE_URL}/rest/v1/scans?id=eq.${SCAN_ID}&status=neq.Completed" \
+            -H "apikey: ${SUPABASE_SERVICE_KEY}" \
+            -H "Authorization: Bearer ${SUPABASE_SERVICE_KEY}" \
+            -H "Content-Type: application/json" \
+            -d '{"status":"Failed","progress":100,"error_message":"The scan job did not complete (timeout or cancellation)."}'

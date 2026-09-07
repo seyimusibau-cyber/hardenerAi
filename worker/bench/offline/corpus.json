@@ -1,0 +1,941 @@
+{
+  "generated_from": "/Users/seyimusibau/Inflimity/canary",
+  "note": "Model answers recorded by Canary. No API calls are needed to use this corpus.",
+  "count": 33,
+  "entries": [
+    {
+      "id": "real_35__baseline__dnspython_2_6_1",
+      "run": "real_35",
+      "runner": "baseline",
+      "model": "gemini-3.5-flash",
+      "task_id": "dnspython_2_6_1",
+      "truth": {
+        "is_vulnerable": true,
+        "source": "PYSEC-2026-1307",
+        "language": "python",
+        "test_cmd": "python3 -m pytest -q -p no:cacheprovider -o addopts='' tests/test_async.py::IgnoreErrors::test_good_wire_with_truncation_flag_and_no_truncation_raise tests/test_async.py::IgnoreErrors::test_good_wire_with_truncation_flag_and_truncation_raise tests/test_async.py::IgnoreErrors::test_wrong_id_wire_with_truncation_flag_and_no_truncation_raise tests/test_async.py::IgnoreErrors::test_wrong_id_wire_with_truncation_flag_and_truncation_raise",
+        "fix_touched_lines": [
+          640
+        ]
+      },
+      "canary": {
+        "patch_applied": true,
+        "patch_passed_test": false
+      },
+      "confidence": 1,
+      "rationale": "The `dns.message.Message` class has a `request_mac` attribute, not `mac`. Using `q.mac` in `udp()`, `tcp()`, `tls()`, and `xfr()` will raise an `AttributeError` when TSIG is used.",
+      "patch": "--- dns/query.py\n+++ dns/query.py\n@@ -725,5 +725,5 @@\n             ignore_unexpected,\n             one_rr_per_rrset,\n             q.keyring,\n-            q.mac,\n+            q.request_mac,\n             ignore_trailing,\n@@ -1012,5 +1012,5 @@\n         _connect(s, destination, expiration)\n         send_tcp(s, wire, expiration)\n         (r, received_time) = receive_tcp(\n-            s, expiration, one_rr_per_rrset, q.keyring, q.mac, ignore_trailing\n+            s, expiration, one_rr_per_rrset, q.keyring, q.request_mac, ignore_trailing\n         )\n@@ -1152,5 +1152,5 @@\n         _tls_handshake(s, expiration)\n         send_tcp(s, wire, expiration)\n         (r, received_time) = receive_tcp(\n-            s, expiration, one_rr_per_rrset, q.keyring, q.mac, ignore_trailing\n+            s, expiration, one_rr_per_rrset, q.keyring, q.request_mac, ignore_trailing\n         )\n@@ -1371,5 +1371,5 @@\n             r = dns.message.from_wire(\n                 wire,\n                 keyring=q.keyring,\n-                request_mac=q.mac,\n+                request_mac=q.request_mac,\n                 xfr=True,"
+    },
+    {
+      "id": "real_35__baseline__dulwich_1_2_5",
+      "run": "real_35",
+      "runner": "baseline",
+      "model": "gemini-3.5-flash",
+      "task_id": "dulwich_1_2_5",
+      "truth": {
+        "is_vulnerable": true,
+        "source": "GHSA-897w-fcg9-f6xj",
+        "language": "python",
+        "test_cmd": "python3 -m pytest -q -p no:cacheprovider -o addopts='' tests/porcelain/__init__.py::FormatPatchTests::test_format_patch_subject_cannot_escape_outdir tests/porcelain/__init__.py::FormatPatchTests::test_format_patch_long_subject_truncated tests/porcelain/__init__.py::SubmoduleTests::test_update_rejects_dotgit_path tests/porcelain/__init__.py::SubmoduleTests::test_update_rejects_parent_traversal_path tests/porcelain/__init__.py::SubmoduleTests::test_check_submodule_path",
+        "fix_touched_lines": [
+          174,
+          177,
+          180,
+          184
+        ]
+      },
+      "canary": {
+        "patch_applied": false,
+        "patch_passed_test": null
+      },
+      "confidence": 0.95,
+      "rationale": "In apply_patches, when handling a binary patch, the index is opened and updated with the new entry, but index.write() is never called to persist the changes to disk. This causes the index updates for binary patches to be lost.",
+      "patch": "--- a/dulwich/patch.py\n+++ b/dulwich/patch.py\n@@ -1558,3 +1558,4 @@\n                     )\n \n                 index[tree_path] = entry\n+                index.write()\n"
+    },
+    {
+      "id": "real_35__baseline__jinja2_lexer",
+      "run": "real_35",
+      "runner": "baseline",
+      "model": "gemini-3.5-flash",
+      "task_id": "jinja2_lexer",
+      "truth": {
+        "is_vulnerable": true,
+        "source": "GHSA-jinja2-sandbox",
+        "language": "python",
+        "test_cmd": "python3 -m pytest -q -p no:cacheprovider -o addopts='' tests/test_core_tags.py::TestSet::test_namespace_set_tuple",
+        "fix_touched_lines": [
+          265,
+          332,
+          760,
+          781
+        ]
+      },
+      "canary": {
+        "patch_applied": true,
+        "patch_passed_test": false
+      },
+      "confidence": 1,
+      "rationale": "The `Failure` class raises `TemplateSyntaxError` but passes `filename` as the third positional argument, which maps to the `name` parameter of `TemplateSyntaxError` instead of `filename`. This causes the template name to be lost or replaced by the filename, and the exception's `filename` attribute t",
+      "patch": "--- a/jinja2/lexer.py\n+++ b/jinja2/lexer.py\n@@ -260,8 +260,12 @@\n         self.message = message\n         self.error_class = cls\n \n-    def __call__(self, lineno: int, filename: str) -> \"te.NoReturn\":\n-        raise self.error_class(self.message, lineno, filename)\n+    def __call__(\n+        self, \n+        lineno: int, \n+        name: t.Optional[str] = None, \n+        filename: t.Optional[str] = None\n+    ) -> \"te.NoReturn\":\n+        raise self.error_class(self.message, lineno, name, filename)\n \n \n class Token(t.NamedTuple):\n@@ -758,7 +762,7 @@\n                     for idx, token in enumerate(tokens):\n                         # failure group\n                         if token.__class__ is Failure:\n-                            raise token(lineno, filename)\n+                            raise token(lineno, name, filename)\n                         # bygroup is a bit more complex, in that case we\n                         # yield for the current token the first named\n                         # group that matched"
+    },
+    {
+      "id": "real_35__baseline__jinja2_lexer__clean",
+      "run": "real_35",
+      "runner": "baseline",
+      "model": "gemini-3.5-flash",
+      "task_id": "jinja2_lexer__clean",
+      "truth": {
+        "is_vulnerable": false,
+        "source": "GHSA-jinja2-sandbox",
+        "language": "python",
+        "test_cmd": null,
+        "fix_touched_lines": [
+          1
+        ]
+      },
+      "canary": {
+        "patch_applied": false,
+        "patch_passed_test": null
+      },
+      "confidence": 1,
+      "rationale": "The `Failure` class's `__call__` method takes `lineno` and `filename` and passes them to `TemplateSyntaxError`. However, `TemplateSyntaxError` expects `(message, lineno, name, filename)`. Passing `filename` as the third positional argument incorrectly sets it as the template `name`. `Failure.__call_",
+      "patch": "--- jinja2/lexer.py\n+++ jinja2/lexer.py\n@@ -265,2 +265,7 @@\n-    def __call__(self, lineno: int, filename: t.Optional[str]) -> \"te.NoReturn\":\n-        raise self.error_class(self.message, lineno, filename)\n+    def __call__(\n+        self,\n+        lineno: int,\n+        name: t.Optional[str] = None,\n+        filename: t.Optional[str] = None,\n+    ) -> \"te.NoReturn\":\n+        raise self.error_class(self.message, lineno, name, filename)\n@@ -760,2 +765,2 @@\n                         if isinstance(token, Failure):\n-                            raise token(lineno, filename)\n+                            raise token(lineno, name, filename)\n"
+    },
+    {
+      "id": "real_35__baseline__loguru_0_5_3",
+      "run": "real_35",
+      "runner": "baseline",
+      "model": "gemini-3.5-flash",
+      "task_id": "loguru_0_5_3",
+      "truth": {
+        "is_vulnerable": true,
+        "source": "GHSA-39ph-wr67-j4xq",
+        "language": "python",
+        "test_cmd": "python3 -m pytest -q -p no:cacheprovider -o addopts='' tests/test_formatting.py::test_non_string_message tests/test_formatting.py::test_non_string_message_is_str_in_record tests/test_formatting.py::test_missing_positional_field_during_formatting tests/test_formatting.py::test_missing_named_field_during_formatting tests/test_formatting.py::test_not_formattable_message tests/test_formatting.py::test_not_formattable_message_with_colors",
+        "fix_touched_lines": [
+          2,
+          69,
+          88,
+          187,
+          204
+        ]
+      },
+      "canary": {
+        "patch_applied": false,
+        "patch_passed_test": null
+      },
+      "confidence": 1,
+      "rationale": "Acquiring a synchronous lock (`self._lock`) across an `await` point in `complete_async` can lead to a deadlock. If the event loop switches to another task that attempts to log (which synchronously acquires `self._lock` in `emit`), the event loop will block indefinitely because the task holding the l",
+      "patch": "--- loguru/_handler.py\n+++ loguru/_handler.py\n@@ -204,5 +204,2 @@\n         if self._enqueue and self._owner_process != multiprocessing.current_process():\n             return\n \n-        with self._lock:\n-            await self._sink.complete()\n+        await self._sink.complete()\n"
+    },
+    {
+      "id": "real_35__baseline__mistune_3_2_1",
+      "run": "real_35",
+      "runner": "baseline",
+      "model": "gemini-3.5-flash",
+      "task_id": "mistune_3_2_1",
+      "truth": {
+        "is_vulnerable": true,
+        "source": "GHSA-hjph-f4mc-wx4c",
+        "language": "python",
+        "test_cmd": "python3 -m pytest -q -p no:cacheprovider -o addopts='' tests/test_misc.py::TestMiscCases::test_image_alt_no_double_encoding",
+        "fix_touched_lines": [
+          5,
+          16,
+          17,
+          20,
+          26
+        ]
+      },
+      "canary": {
+        "patch_applied": true,
+        "patch_passed_test": false
+      },
+      "confidence": 1,
+      "rationale": "When parsing a multi-line footnote, `BlockState` is instantiated without passing `parent=state`. This causes the new state to lose the environment (`env`), which contains reference links and other footnotes, preventing them from being resolved correctly inside the footnote.",
+      "patch": "--- mistune/plugins/footnotes.py\n+++ mistune/plugins/footnotes.py\n@@ -74,3 +74,3 @@\n-        footer_state = BlockState()\n+        footer_state = BlockState(parent=state)\n         footer_state.process(text)"
+    },
+    {
+      "id": "real_35__baseline__mistune_3_2_1__clean",
+      "run": "real_35",
+      "runner": "baseline",
+      "model": "gemini-3.5-flash",
+      "task_id": "mistune_3_2_1__clean",
+      "truth": {
+        "is_vulnerable": false,
+        "source": "GHSA-hjph-f4mc-wx4c",
+        "language": "python",
+        "test_cmd": null,
+        "fix_touched_lines": [
+          1
+        ]
+      },
+      "canary": {
+        "patch_applied": false,
+        "patch_passed_test": null
+      },
+      "confidence": 1,
+      "rationale": "When parsing a multi-line footnote item, a new `BlockState` is instantiated without passing the current `state` as its parent. This causes the nested parser to lose access to the environment (`state.env`), which contains reference links, other footnotes, and configuration, preventing reference links",
+      "patch": "--- mistune/plugins/footnotes.py\n+++ mistune/plugins/footnotes.py\n@@ -72,3 +72,3 @@\n         pattern = re.compile(r\"^ {\" + str(spaces) + r\",}\", flags=re.M)\n         text = pattern.sub(\"\", text).strip()\n \n-        footer_state = BlockState()\n+        footer_state = BlockState(parent=state)\n         footer_state.process(text)\n"
+    },
+    {
+      "id": "real_35__baseline__protego_redos",
+      "run": "real_35",
+      "runner": "baseline",
+      "model": "gemini-3.5-flash",
+      "task_id": "protego_redos",
+      "truth": {
+        "is_vulnerable": true,
+        "source": "GHSA-protego-redos",
+        "language": "python",
+        "test_cmd": "python3 -m pytest -q -p no:cacheprovider -o addopts='' tests/test_protego.py::test_redos",
+        "fix_touched_lines": [
+          4,
+          5,
+          20,
+          24,
+          25,
+          28,
+          29,
+          30,
+          31,
+          34,
+          36,
+          37,
+          43,
+          44,
+          45,
+          48,
+          49,
+          51,
+          52,
+          53,
+          54,
+          55,
+          56,
+          57
+        ]
+      },
+      "canary": {
+        "patch_applied": true,
+        "patch_passed_test": false
+      },
+      "confidence": 1,
+      "rationale": "In `_prepare_pattern_for_regex`, the code splits the pattern into literal parts and wildcards using `re.split`. However, it determines whether a substring is a wildcard solely by checking if it is in `_WILDCARDS` (i.e., `*` or `$`). If a literal part of the pattern contains a `$` character (which is",
+      "patch": "--- protego/_urlpattern.py\n+++ protego/_urlpattern.py\n@@ -52,3 +52,3 @@\n         for index, substr in enumerate(s):\n-            if substr not in _WILDCARDS:\n+            if index % 2 == 0:\n                 s[index] = re.escape(substr)\n"
+    },
+    {
+      "id": "real_35__baseline__protego_redos__canary",
+      "run": "real_35",
+      "runner": "baseline",
+      "model": "gemini-3.5-flash",
+      "task_id": "protego_redos__canary",
+      "truth": {
+        "is_vulnerable": true,
+        "source": "GHSA-protego-redos",
+        "language": "python",
+        "test_cmd": "python3 -m pytest -q -p no:cacheprovider -o addopts='' tests/test_protego.py::test_redos",
+        "fix_touched_lines": [
+          4,
+          5,
+          20,
+          24,
+          25,
+          28,
+          29,
+          30,
+          31,
+          34,
+          36,
+          37,
+          43,
+          44,
+          45,
+          48,
+          49,
+          51,
+          52,
+          53,
+          54,
+          55,
+          56,
+          57
+        ]
+      },
+      "canary": {
+        "patch_applied": true,
+        "patch_passed_test": false
+      },
+      "confidence": 1,
+      "rationale": "The use of the lazy quantifier '.*?' for wildcard matching in robots.txt patterns can lead to catastrophic backtracking (ReDoS) when matched against long, non-matching URLs. Changing the lazy quantifier '.*?' to the greedy quantifier '.*' resolves this vulnerability because the greedy quantifier avo",
+      "patch": "--- protego/_urlpattern.py\n+++ protego/_urlpattern.py\n@@ -53,5 +53,5 @@\n             if substr not in _WILDCARDS:\n                 s[index] = re.escape(substr)\n             elif s[index] == \"*\":\n-                s[index] = \".*?\"\n+                s[index] = \".*\"\n         return \"\".join(s)"
+    },
+    {
+      "id": "real_35__baseline__pypdf_runlength",
+      "run": "real_35",
+      "runner": "baseline",
+      "model": "gemini-3.5-flash",
+      "task_id": "pypdf_runlength",
+      "truth": {
+        "is_vulnerable": true,
+        "source": "GHSA-pypdf-runlength",
+        "language": "python",
+        "test_cmd": "python3 -m pytest -q -p no:cacheprovider -o addopts='' tests/test_filters.py::test_runlengthdecode__decode_limit",
+        "fix_touched_lines": [
+          75,
+          410,
+          412,
+          420,
+          444
+        ]
+      },
+      "canary": {
+        "patch_applied": true,
+        "patch_passed_test": false
+      },
+      "confidence": 1,
+      "rationale": "If SA.DECODE_PARMS is an IndirectObject, it is not resolved before checking if it is an instance of list or tuple. This causes it to be wrapped in a single-element tuple, resulting in incorrect pairing with filters and decoding failures.",
+      "patch": "--- pypdf/filters.py\n+++ pypdf/filters.py\n@@ -795,2 +795,4 @@\n     decode_parms = stream.get(SA.DECODE_PARMS, ({},) * len(filters))\n+    if isinstance(decode_parms, IndirectObject):\n+        decode_parms = decode_parms.get_object()\n     if not isinstance(decode_parms, (list, tuple)):\n"
+    },
+    {
+      "id": "real_35__baseline__pypickle_2_0_0",
+      "run": "real_35",
+      "runner": "baseline",
+      "model": "gemini-3.5-flash",
+      "task_id": "pypickle_2_0_0",
+      "truth": {
+        "is_vulnerable": true,
+        "source": "PYSEC-2025-45",
+        "language": "python",
+        "test_cmd": "python3 -m pytest -q -p no:cacheprovider -o addopts='' tests/test_pypickle.py::test_save_ext tests/test_pypickle.py::test_load_validate_default_and_dict tests/test_pypickle.py::test_load_no_validate tests/test_pypickle.py::test_load_malicious_pickle tests/test_pypickle.py::test_load_nonexistent_file tests/test_pypickle.py::test_safe_pickle tests/test_pypickle.py::test_malicious_pickle tests/test_pypickle.py::test_sklearn_with_exploit tests/test_pypickle.py::test_various_exploits tests/test_pypickle.py::test_save_in_temp_dir tests/test_pypickle.py::test_save_in_os_tempdir tests/test_pypickle.py::test_allow_external_path tests/test_pypickle.py::test_overwrite_allowed",
+        "fix_touched_lines": [
+          4,
+          7,
+          11,
+          16
+        ]
+      },
+      "canary": {
+        "patch_applied": true,
+        "patch_passed_test": false
+      },
+      "confidence": 0.9,
+      "rationale": "Line 4 uses a tab character for indentation instead of spaces, which violates PEP 8 and can cause inconsistency or syntax issues in Python environments.",
+      "patch": "--- pypickle/__init__.py\n+++ pypickle/__init__.py\n@@ -1,7 +1,7 @@\n import logging\n from pypickle.pypickle import (\n     save,\n-\tload,\n+    load,\n     clean,\n     check_logger,\n )"
+    },
+    {
+      "id": "real_35__baseline__requests_2_32_4",
+      "run": "real_35",
+      "runner": "baseline",
+      "model": "gemini-3.5-flash",
+      "task_id": "requests_2_32_4",
+      "truth": {
+        "is_vulnerable": true,
+        "source": "GHSA-9hjg-9r4m-mvj7",
+        "language": "python",
+        "test_cmd": "python3 -m pytest -q -p no:cacheprovider -o addopts='' tests/test_utils.py::TestGetNetrcAuth::test_works tests/test_utils.py::TestGetNetrcAuth::test_not_vulnerable_to_bad_url_parsing",
+        "fix_touched_lines": [
+          40,
+          139,
+          219,
+          220,
+          221,
+          222,
+          223,
+          224,
+          225,
+          226,
+          236,
+          237,
+          238,
+          239,
+          240,
+          241,
+          242
+        ]
+      },
+      "canary": {
+        "patch_applied": true,
+        "patch_passed_test": false
+      },
+      "confidence": 0.95,
+      "rationale": "In parse_list_header and parse_dict_header, the outer quotes are stripped before calling unquote_header_value. However, unquote_header_value expects the outer quotes to be present to trigger its unquoting logic. This causes escaped characters (like escaped quotes) inside the header values to not be ",
+      "patch": "--- requests/utils.py\n+++ requests/utils.py\n@@ -398,5 +398,5 @@\n     result = []\n     for item in _parse_list_header(value):\n         if item[:1] == item[-1:] == '\"':\n-            item = unquote_header_value(item[1:-1])\n+            item = unquote_header_value(item)\n         result.append(item)\n@@ -433,5 +433,5 @@\n         name, value = item.split(\"=\", 1)\n         if value[:1] == value[-1:] == '\"':\n-            value = unquote_header_value(value[1:-1])\n+            value = unquote_header_value(value)\n         result[name] = value"
+    },
+    {
+      "id": "real_35__baseline__requests_2_32_4__clean",
+      "run": "real_35",
+      "runner": "baseline",
+      "model": "gemini-3.5-flash",
+      "task_id": "requests_2_32_4__clean",
+      "truth": {
+        "is_vulnerable": false,
+        "source": "GHSA-9hjg-9r4m-mvj7",
+        "language": "python",
+        "test_cmd": null,
+        "fix_touched_lines": [
+          1
+        ]
+      },
+      "canary": {
+        "patch_applied": false,
+        "patch_passed_test": null
+      },
+      "confidence": 0.95,
+      "rationale": "The `get_encodings_from_content` function is documented to accept a `bytestring` as its `content` parameter. However, it uses string-based regular expressions (`re.compile(r'...')`) to search the content. In Python 3, attempting to run string regular expressions on a `bytes` object raises a `TypeErr",
+      "patch": "--- requests/utils.py\n+++ requests/utils.py\n@@ -492,2 +492,5 @@\n     )\n \n+    if isinstance(content, bytes):\n+        content = content.decode(\"utf-8\", \"replace\")\n+\n     charset_re = re.compile(r'<meta.*?charset=[\"\\']*(.+?)[\"\\'>]', flags=re.I)"
+    },
+    {
+      "id": "real_35__baseline__scitokens_1_9_6",
+      "run": "real_35",
+      "runner": "baseline",
+      "model": "gemini-3.5-flash",
+      "task_id": "scitokens_1_9_6",
+      "truth": {
+        "is_vulnerable": true,
+        "source": "PYSEC-2026-530",
+        "language": "python",
+        "test_cmd": "python3 -m pytest -q -p no:cacheprovider -o addopts='' tests/test_keycache.py::TestKeyCache::test_immutable_cache tests/test_keycache.py::TestKeyCacheSQLInjection::test_injection_in_issuer_does_not_delete_other_rows tests/test_keycache.py::TestKeyCacheSQLInjection::test_injection_in_key_id_does_not_delete_other_rows tests/test_keycache.py::TestKeyCacheSQLInjection::test_delete_cache_entry_with_injection_string tests/test_keycache.py::TestKeyCacheSQLInjection::test_union_select_injection_is_literal tests/test_keycache.py::TestKeyCacheSQLInjection::test_getkeyinfo_injection_issuer_no_leak tests/test_keycache.py::TestKeyCacheSQLInjection::test_negative_cache_with_injection_string",
+        "fix_touched_lines": [
+          174,
+          175,
+          591,
+          601,
+          602,
+          603,
+          611,
+          655,
+          656,
+          681,
+          692,
+          712,
+          721
+        ]
+      },
+      "canary": {
+        "patch_applied": true,
+        "patch_passed_test": false
+      },
+      "confidence": 1,
+      "rationale": "If the enforcer's audience is set to 'ANY', it should accept any audience in the token. However, the current implementation returns False when self._audience == 'ANY', which incorrectly rejects all tokens.",
+      "patch": "--- scitokens/scitokens.py\n+++ scitokens/scitokens.py\n@@ -599,3 +599,3 @@\n         elif self._audience == \"ANY\":\n-            return False\n+            return True\n         elif value == \"ANY\":\n"
+    },
+    {
+      "id": "real_35__baseline__tornado_6_5_5",
+      "run": "real_35",
+      "runner": "baseline",
+      "model": "gemini-3.5-flash",
+      "task_id": "tornado_6_5_5",
+      "truth": {
+        "is_vulnerable": true,
+        "source": "GHSA-qjxf-f2mg-c6mc",
+        "language": "python",
+        "test_cmd": "python3 -m pytest -q -p no:cacheprovider -o addopts='' tornado/test/web_test.py::CookieTest::test_set_cookie_forbidden_char",
+        "fix_touched_lines": [
+          696,
+          697,
+          698
+        ]
+      },
+      "canary": {
+        "patch_applied": true,
+        "patch_passed_test": false
+      },
+      "confidence": 1,
+      "rationale": "The `ValueError` constructor does not automatically format strings when multiple arguments are passed. Passing `retval` as a separate argument results in an unformatted error message containing `%r`. It should be formatted using the `%` operator.",
+      "patch": "--- tornado/web.py\n+++ tornado/web.py\n@@ -438,5 +438,5 @@\n         # If \\n is allowed into the header, it is possible to inject\n         # additional headers or split the request.\n         if RequestHandler._VALID_HEADER_CHARS.fullmatch(retval) is None:\n-            raise ValueError(\"Unsafe header value %r\", retval)\n+            raise ValueError(\"Unsafe header value %r\" % retval)\n         return retval"
+    },
+    {
+      "id": "real_35__baseline__tornado_6_5_5__clean",
+      "run": "real_35",
+      "runner": "baseline",
+      "model": "gemini-3.5-flash",
+      "task_id": "tornado_6_5_5__clean",
+      "truth": {
+        "is_vulnerable": false,
+        "source": "GHSA-qjxf-f2mg-c6mc",
+        "language": "python",
+        "test_cmd": null,
+        "fix_touched_lines": [
+          1
+        ]
+      },
+      "canary": {
+        "patch_applied": false,
+        "patch_passed_test": null
+      },
+      "confidence": 1,
+      "rationale": "RequestHandler.write and RequestHandler.finish should accept list objects to be serialized as JSON, as the historical JSON hijacking vulnerability in IE is no longer a concern for modern browsers.",
+      "patch": "--- tornado/web.py\n+++ tornado/web.py\n@@ -978,3 +978,3 @@\n-    def write(self, chunk: Union[str, bytes, dict]) -> None:\n+    def write(self, chunk: Union[str, bytes, dict, list]) -> None:\n         \"\"\"Writes the given chunk to the output buffer.\n@@ -996,11 +996,5 @@\n-        if not isinstance(chunk, (bytes, unicode_type, dict)):\n-            message = \"write() only accepts bytes, unicode, and dict objects\"\n-            if isinstance(chunk, list):\n-                message += (\n-                    \". Lists not accepted for security reasons; see \"\n-                    + \"http://www.tornadoweb.org/en/stable/web.html#tornado.web.RequestHandler.write\"  # noqa: E501\n-                )\n-            raise TypeError(message)\n-        if isinstance(chunk, dict):\n+        if not isinstance(chunk, (bytes, unicode_type, dict, list)):\n+            message = \"write() only accepts bytes, unicode, dict, and list objects\"\n+            raise TypeError(message)\n+        if isinstance(chunk, (dict, list)):\n             chunk = escape.json_encode(chunk)\n@@ -1270,3 +1264,3 @@\n-    def finish(self, chunk: Optional[Union[str, bytes, dict]] = None) -> \"Future[None]\":\n+    def finish(self, chunk: Optional[Union[str, bytes, dict, list]] = None) -> \"Future[None]\":\n         \"\"\"Finishes this response, ending the HTTP request."
+    },
+    {
+      "id": "real_35__solution__mistune_3_2_1",
+      "run": "real_35",
+      "runner": "solution",
+      "model": "gemini-3.5-flash",
+      "task_id": "mistune_3_2_1",
+      "truth": {
+        "is_vulnerable": true,
+        "source": "GHSA-hjph-f4mc-wx4c",
+        "language": "python",
+        "test_cmd": "python3 -m pytest -q -p no:cacheprovider -o addopts='' tests/test_misc.py::TestMiscCases::test_image_alt_no_double_encoding",
+        "fix_touched_lines": [
+          5,
+          16,
+          17,
+          20,
+          26
+        ]
+      },
+      "canary": {
+        "patch_applied": false,
+        "patch_passed_test": null
+      },
+      "confidence": 1,
+      "rationale": "The footnotes plugin file is cut off abruptly at line 160, leaving an incomplete statement `md.renderer.register(\"footnote_`. It needs to register both `footnote_item` and `footnotes` renderers to function correctly.",
+      "patch": "diff --git a/mistune/plugins/footnotes.py b/mistune/plugins/footnotes.py\nindex 1234567..89abcde 100\n--- a/mistune/plugins/footnotes.py\n+++ b/mistune/plugins/footnotes.py\n@@ -156,5 +156,6 @@\n     md.after_render_hooks.append(md_footnotes_hook)\n \n     if md.renderer and md.renderer.NAME == \"html\":\n         md.renderer.register(\"footnote_ref\", render_footnote_ref)\n-        md.renderer.register(\"footnote_\n\\ No newline at end of file\n+        md.renderer.register(\"footnote_item\", render_footnote_item)\n+        md.renderer.register(\"footnotes\", render_footnotes)\n"
+    },
+    {
+      "id": "real_35__solution__mistune_3_2_1__clean",
+      "run": "real_35",
+      "runner": "solution",
+      "model": "gemini-3.5-flash",
+      "task_id": "mistune_3_2_1__clean",
+      "truth": {
+        "is_vulnerable": false,
+        "source": "GHSA-hjph-f4mc-wx4c",
+        "language": "python",
+        "test_cmd": null,
+        "fix_touched_lines": [
+          1
+        ]
+      },
+      "canary": {
+        "patch_applied": false,
+        "patch_passed_test": null
+      },
+      "confidence": 1,
+      "rationale": "When parsing multi-line footnote items, a new BlockState is instantiated without passing the parent state. This prevents the footnote parser from inheriting the parent state's environment (such as reference links, other footnotes, and configuration), causing references inside footnotes to fail to re",
+      "patch": "--- mistune/plugins/footnotes.py\n+++ mistune/plugins/footnotes.py\n@@ -72,3 +72,3 @@\n         pattern = re.compile(r\"^ {\" + str(spaces) + r\",}\", flags=re.M)\n         text = pattern.sub(\"\", text).strip()\n \n-        footer_state = BlockState()\n+        footer_state = BlockState(parent=state)\n         footer_state.process(text)\n"
+    },
+    {
+      "id": "real_37__baseline__dnspython_2_6_1",
+      "run": "real_37",
+      "runner": "baseline",
+      "model": "gemini-3.7-flash",
+      "task_id": "dnspython_2_6_1",
+      "truth": {
+        "is_vulnerable": true,
+        "source": "PYSEC-2026-1307",
+        "language": "python",
+        "test_cmd": "python3 -m pytest -q -p no:cacheprovider -o addopts='' tests/test_async.py::IgnoreErrors::test_good_wire_with_truncation_flag_and_no_truncation_raise tests/test_async.py::IgnoreErrors::test_good_wire_with_truncation_flag_and_truncation_raise tests/test_async.py::IgnoreErrors::test_wrong_id_wire_with_truncation_flag_and_no_truncation_raise tests/test_async.py::IgnoreErrors::test_wrong_id_wire_with_truncation_flag_and_truncation_raise",
+        "fix_touched_lines": [
+          640
+        ]
+      },
+      "canary": {
+        "patch_applied": true,
+        "patch_passed_test": false
+      },
+      "confidence": 0.95,
+      "rationale": "When verifying TSIG on the response in https() and quic(), request_mac should be q.mac (the TSIG MAC of the query generated during to_wire()), not q.request_mac.",
+      "patch": "--- a/dns/query.py\n+++ b/dns/query.py\n@@ -493,7 +493,7 @@ def https(\n     r = dns.message.from_wire(\n         response.content,\n         keyring=q.keyring,\n-        request_mac=q.request_mac,\n+        request_mac=q.mac,\n         one_rr_per_rrset=one_rr_per_rrset,\n         ignore_trailing=ignore_trailing,\n     )\n@@ -1240,7 +1240,7 @@ def quic(\n     r = dns.message.from_wire(\n         wire,\n         keyring=q.keyring,\n-        request_mac=q.request_mac,\n+        request_mac=q.mac,\n         one_rr_per_rrset=one_rr_per_rrset,\n         ignore_trailing=ignore_trailing,\n     )\n"
+    },
+    {
+      "id": "real_37__baseline__dulwich_1_2_5",
+      "run": "real_37",
+      "runner": "baseline",
+      "model": "gemini-3.7-flash",
+      "task_id": "dulwich_1_2_5",
+      "truth": {
+        "is_vulnerable": true,
+        "source": "GHSA-897w-fcg9-f6xj",
+        "language": "python",
+        "test_cmd": "python3 -m pytest -q -p no:cacheprovider -o addopts='' tests/porcelain/__init__.py::FormatPatchTests::test_format_patch_subject_cannot_escape_outdir tests/porcelain/__init__.py::FormatPatchTests::test_format_patch_long_subject_truncated tests/porcelain/__init__.py::SubmoduleTests::test_update_rejects_dotgit_path tests/porcelain/__init__.py::SubmoduleTests::test_update_rejects_parent_traversal_path tests/porcelain/__init__.py::SubmoduleTests::test_check_submodule_path",
+        "fix_touched_lines": [
+          174,
+          177,
+          180,
+          184
+        ]
+      },
+      "canary": {
+        "patch_applied": true,
+        "patch_passed_test": false
+      },
+      "confidence": 0.95,
+      "rationale": "In `parse_unified_diff`, when encountering a line that is not an extended diff header (such as a hunk header `@@` or the next patch's `diff --git` header on mode changes/renames), the `else` clause increments `i` before breaking out of the extended header loop (`i += 1; break`). This skips and loses",
+      "patch": "--- a/dulwich/patch.py\n+++ b/dulwich/patch.py\n@@ -1143,3 +1143,2 @@\n                 else:\n-                    i += 1\n                     break\n"
+    },
+    {
+      "id": "real_37__baseline__jinja2_lexer",
+      "run": "real_37",
+      "runner": "baseline",
+      "model": "gemini-3.7-flash",
+      "task_id": "jinja2_lexer",
+      "truth": {
+        "is_vulnerable": true,
+        "source": "GHSA-jinja2-sandbox",
+        "language": "python",
+        "test_cmd": "python3 -m pytest -q -p no:cacheprovider -o addopts='' tests/test_core_tags.py::TestSet::test_namespace_set_tuple",
+        "fix_touched_lines": [
+          265,
+          332,
+          760,
+          781
+        ]
+      },
+      "canary": {
+        "patch_applied": true,
+        "patch_passed_test": false
+      },
+      "confidence": 0.95,
+      "rationale": "`Failure.__call__` and its call site in `tokeniter` only pass `(lineno, filename)` instead of `(lineno, name, filename)`. Because `TemplateSyntaxError` takes `(message, lineno, name=None, filename=None)`, `filename` is mistakenly assigned to the `name` attribute and `filename` becomes `None`, losing",
+      "patch": "--- a/jinja2/lexer.py\n+++ b/jinja2/lexer.py\n@@ -262,8 +262,10 @@\n         self.message = message\n         self.error_class = cls\n \n-    def __call__(self, lineno: int, filename: str) -> \"te.NoReturn\":\n-        raise self.error_class(self.message, lineno, filename)\n+    def __call__(\n+        self, lineno: int, name: t.Optional[str], filename: t.Optional[str] = None\n+    ) -> \"te.NoReturn\":\n+        raise self.error_class(self.message, lineno, name, filename)\n \n \n class Token(t.NamedTuple):\n@@ -758,7 +760,7 @@\n                     for idx, token in enumerate(tokens):\n                         # failure group\n                         if token.__class__ is Failure:\n-                            raise token(lineno, filename)\n+                            raise token(lineno, name, filename)\n                         # bygroup is a bit more complex, in that case we\n                         # yield for the current token the first named\n                         # group that matched\n"
+    },
+    {
+      "id": "real_37__baseline__jinja2_lexer__clean",
+      "run": "real_37",
+      "runner": "baseline",
+      "model": "gemini-3.7-flash",
+      "task_id": "jinja2_lexer__clean",
+      "truth": {
+        "is_vulnerable": false,
+        "source": "GHSA-jinja2-sandbox",
+        "language": "python",
+        "test_cmd": null,
+        "fix_touched_lines": [
+          1
+        ]
+      },
+      "canary": {
+        "patch_applied": false,
+        "patch_passed_test": null
+      },
+      "confidence": 0.95,
+      "rationale": "The `TOKEN_VARIABLE_BEGIN` rules do not include `\\+{variable_end_re}`, unlike comment, block, and raw end rules. When `+}}` is used to preserve whitespace after a variable tag, the `+` is mistakenly lexed as an operator token rather than part of the variable end delimiter.",
+      "patch": "--- a/jinja2/lexer.py\n+++ b/jinja2/lexer.py\n@@ -562,7 +562,7 @@\n             # variables\n             TOKEN_VARIABLE_BEGIN: [\n                 _Rule(\n-                    c(rf\"\\-{variable_end_re}\\s*|{variable_end_re}\"),\n+                    c(rf\"\\+{variable_end_re}|\\-{variable_end_re}\\s*|{variable_end_re}\"),\n                     TOKEN_VARIABLE_END,\n                     \"#pop\",\n                 )\n"
+    },
+    {
+      "id": "real_37__baseline__mistune_3_2_1",
+      "run": "real_37",
+      "runner": "baseline",
+      "model": "gemini-3.7-flash",
+      "task_id": "mistune_3_2_1",
+      "truth": {
+        "is_vulnerable": true,
+        "source": "GHSA-hjph-f4mc-wx4c",
+        "language": "python",
+        "test_cmd": "python3 -m pytest -q -p no:cacheprovider -o addopts='' tests/test_misc.py::TestMiscCases::test_image_alt_no_double_encoding",
+        "fix_touched_lines": [
+          5,
+          16,
+          17,
+          20,
+          26
+        ]
+      },
+      "canary": {
+        "patch_applied": true,
+        "patch_passed_test": false
+      },
+      "confidence": 0.95,
+      "rationale": "The regex pattern uses `{spaces,}` which matches and removes `spaces` or more leading whitespace characters from continuation lines. This strips all leading indentation beyond the base footnote indent, corrupting nested indented blocks such as code blocks or sub-lists. It should strip at most `space",
+      "patch": "--- a/mistune/plugins/footnotes.py\n+++ b/mistune/plugins/footnotes.py\n@@ -71,3 +71,3 @@\n-        pattern = re.compile(r\"^ {\" + str(spaces) + r\",}\", flags=re.M)\n+        pattern = re.compile(r\"^ {1,\" + str(spaces) + r\"}\", flags=re.M)\n"
+    },
+    {
+      "id": "real_37__baseline__mistune_3_2_1__clean",
+      "run": "real_37",
+      "runner": "baseline",
+      "model": "gemini-3.7-flash",
+      "task_id": "mistune_3_2_1__clean",
+      "truth": {
+        "is_vulnerable": false,
+        "source": "GHSA-hjph-f4mc-wx4c",
+        "language": "python",
+        "test_cmd": null,
+        "fix_touched_lines": [
+          1
+        ]
+      },
+      "canary": {
+        "patch_applied": false,
+        "patch_passed_test": null
+      },
+      "confidence": 0.95,
+      "rationale": "`footer_state` is instantiated as `BlockState()` without passing `parent=state`. Consequently, `footer_state.env` is initialized as a new empty dictionary rather than inheriting the environment from `state` (which contains link references, plugin state, etc.), breaking parsing of reference links and",
+      "patch": "--- a/mistune/plugins/footnotes.py\n+++ b/mistune/plugins/footnotes.py\n@@ -75,3 +75,3 @@\n \n-        footer_state = BlockState()\n+        footer_state = BlockState(parent=state)\n         footer_state.process(text)\n"
+    },
+    {
+      "id": "real_37__baseline__protego_redos__canary",
+      "run": "real_37",
+      "runner": "baseline",
+      "model": "gemini-3.7-flash",
+      "task_id": "protego_redos__canary",
+      "truth": {
+        "is_vulnerable": true,
+        "source": "GHSA-protego-redos",
+        "language": "python",
+        "test_cmd": "python3 -m pytest -q -p no:cacheprovider -o addopts='' tests/test_protego.py::test_redos",
+        "fix_touched_lines": [
+          4,
+          5,
+          20,
+          24,
+          25,
+          28,
+          29,
+          30,
+          31,
+          34,
+          36,
+          37,
+          43,
+          44,
+          45,
+          48,
+          49,
+          51,
+          52,
+          53,
+          54,
+          55,
+          56,
+          57
+        ]
+      },
+      "canary": {
+        "patch_applied": true,
+        "patch_passed_test": false
+      },
+      "confidence": 0.9,
+      "rationale": "In `_prepare_pattern_for_regex`, wildcard `*` was incorrectly converted to lazy matching `.*?` instead of greedy `.*`.",
+      "patch": "--- a/protego/_urlpattern.py\n+++ b/protego/_urlpattern.py\n@@ -53,5 +53,5 @@\n             if substr not in _WILDCARDS:\n                 s[index] = re.escape(substr)\n             elif s[index] == \"*\":\n-                s[index] = \".*?\"\n+                s[index] = \".*\"\n         return \"\".join(s)\n"
+    },
+    {
+      "id": "real_37__baseline__pypdf_runlength",
+      "run": "real_37",
+      "runner": "baseline",
+      "model": "gemini-3.7-flash",
+      "task_id": "pypdf_runlength",
+      "truth": {
+        "is_vulnerable": true,
+        "source": "GHSA-pypdf-runlength",
+        "language": "python",
+        "test_cmd": "python3 -m pytest -q -p no:cacheprovider -o addopts='' tests/test_filters.py::test_runlengthdecode__decode_limit",
+        "fix_touched_lines": [
+          75,
+          410,
+          412,
+          420,
+          444
+        ]
+      },
+      "canary": {
+        "patch_applied": true,
+        "patch_passed_test": false
+      },
+      "confidence": 0.95,
+      "rationale": "When decoding CCITTFaxDecode streams where the `/Height` key is not present in the stream object, `stream.get(IA.HEIGHT, ())` returns the default empty tuple `()`. Passing this to `CCITTFaxDecode.decode` causes `_get_parameters` to execute `int(rows)` on `()`, which raises a `TypeError`. The fallbac",
+      "patch": "--- a/pypdf/filters.py\n+++ b/pypdf/filters.py\n@@ -819,3 +819,3 @@\n         elif filter_name in (FT.CCITT_FAX_DECODE, FTA.CCF):\n             _deprecate_inline_image_filters(filter_name=filter_name, old_name=FTA.CCF, new_name=FT.CCITT_FAX_DECODE)\n-            height = stream.get(IA.HEIGHT, ())\n+            height = stream.get(IA.HEIGHT, 0)\n             data = CCITTFaxDecode.decode(data, params, height)\n"
+    },
+    {
+      "id": "real_37__baseline__requests_2_32_4",
+      "run": "real_37",
+      "runner": "baseline",
+      "model": "gemini-3.7-flash",
+      "task_id": "requests_2_32_4",
+      "truth": {
+        "is_vulnerable": true,
+        "source": "GHSA-9hjg-9r4m-mvj7",
+        "language": "python",
+        "test_cmd": "python3 -m pytest -q -p no:cacheprovider -o addopts='' tests/test_utils.py::TestGetNetrcAuth::test_works tests/test_utils.py::TestGetNetrcAuth::test_not_vulnerable_to_bad_url_parsing",
+        "fix_touched_lines": [
+          40,
+          139,
+          219,
+          220,
+          221,
+          222,
+          223,
+          224,
+          225,
+          226,
+          236,
+          237,
+          238,
+          239,
+          240,
+          241,
+          242
+        ]
+      },
+      "canary": {
+        "patch_applied": true,
+        "patch_passed_test": false
+      },
+      "confidence": 0.95,
+      "rationale": "In `super_len`, an object may have a `fileno` attribute but lack a `mode` attribute (e.g. custom file-like objects, socket objects, or file descriptor wrappers). Accessing `o.mode` directly raises an `AttributeError`. Checking `hasattr(o, \"mode\")` before checking `\"b\" not in o.mode` prevents this er",
+      "patch": "--- requests/utils.py\n+++ requests/utils.py\n@@ -161,3 +161,3 @@\n             # Having used fstat to determine the file length, we need to\n             # confirm that this file was opened up in binary mode.\n-            if \"b\" not in o.mode:\n+            if hasattr(o, \"mode\") and \"b\" not in o.mode:\n"
+    },
+    {
+      "id": "real_37__baseline__requests_2_32_4__clean",
+      "run": "real_37",
+      "runner": "baseline",
+      "model": "gemini-3.7-flash",
+      "task_id": "requests_2_32_4__clean",
+      "truth": {
+        "is_vulnerable": false,
+        "source": "GHSA-9hjg-9r4m-mvj7",
+        "language": "python",
+        "test_cmd": null,
+        "fix_touched_lines": [
+          1
+        ]
+      },
+      "canary": {
+        "patch_applied": false,
+        "patch_passed_test": null
+      },
+      "confidence": 0.95,
+      "rationale": "Objects that implement `fileno()` are not guaranteed to have a `mode` attribute (e.g., custom file wrappers or tarfile extracted file objects). Accessing `o.mode` directly without checking `hasattr(o, 'mode')` raises an AttributeError.",
+      "patch": "--- a/requests/utils.py\n+++ b/requests/utils.py\n@@ -161,3 +161,3 @@\n             # Having used fstat to determine the file length, we need to\n             # confirm that this file was opened up in binary mode.\n-            if \"b\" not in o.mode:\n+            if hasattr(o, \"mode\") and \"b\" not in o.mode:\n"
+    },
+    {
+      "id": "real_37__baseline__scitokens_1_9_6",
+      "run": "real_37",
+      "runner": "baseline",
+      "model": "gemini-3.7-flash",
+      "task_id": "scitokens_1_9_6",
+      "truth": {
+        "is_vulnerable": true,
+        "source": "PYSEC-2026-530",
+        "language": "python",
+        "test_cmd": "python3 -m pytest -q -p no:cacheprovider -o addopts='' tests/test_keycache.py::TestKeyCache::test_immutable_cache tests/test_keycache.py::TestKeyCacheSQLInjection::test_injection_in_issuer_does_not_delete_other_rows tests/test_keycache.py::TestKeyCacheSQLInjection::test_injection_in_key_id_does_not_delete_other_rows tests/test_keycache.py::TestKeyCacheSQLInjection::test_delete_cache_entry_with_injection_string tests/test_keycache.py::TestKeyCacheSQLInjection::test_union_select_injection_is_literal tests/test_keycache.py::TestKeyCacheSQLInjection::test_getkeyinfo_injection_issuer_no_leak tests/test_keycache.py::TestKeyCacheSQLInjection::test_negative_cache_with_injection_string",
+        "fix_touched_lines": [
+          174,
+          175,
+          591,
+          601,
+          602,
+          603,
+          611,
+          655,
+          656,
+          681,
+          692,
+          712,
+          721
+        ]
+      },
+      "canary": {
+        "patch_applied": true,
+        "patch_passed_test": false
+      },
+      "confidence": 0.95,
+      "rationale": "In `Enforcer._validate_aud`, when `self._audience == \"ANY\"`, the method returns `False` instead of `True`. This causes validation to reject all tokens when the Enforcer is configured to accept any audience.",
+      "patch": "--- a/scitokens/scitokens.py\n+++ b/scitokens/scitokens.py\n@@ -597,3 +597,3 @@\n         if not self._audience:\n             return False\n         elif self._audience == \"ANY\":\n-            return False\n+            return True\n         elif value == \"ANY\":\n"
+    },
+    {
+      "id": "real_37__baseline__tornado_6_5_5",
+      "run": "real_37",
+      "runner": "baseline",
+      "model": "gemini-3.7-flash",
+      "task_id": "tornado_6_5_5",
+      "truth": {
+        "is_vulnerable": true,
+        "source": "GHSA-qjxf-f2mg-c6mc",
+        "language": "python",
+        "test_cmd": "python3 -m pytest -q -p no:cacheprovider -o addopts='' tornado/test/web_test.py::CookieTest::test_set_cookie_forbidden_char",
+        "fix_touched_lines": [
+          696,
+          697,
+          698
+        ]
+      },
+      "canary": {
+        "patch_applied": true,
+        "patch_passed_test": false
+      },
+      "confidence": 0.95,
+      "rationale": "`RequestHandler.write` rejects `list` objects due to historical JSON hijacking concerns that no longer apply to modern browsers. `write()` should accept `list` in addition to `dict` and serialize it to JSON.",
+      "patch": "--- a/tornado/web.py\n+++ b/tornado/web.py\n@@ -954,7 +954,7 @@\n         self.set_header(\"Location\", utf8(url))\n         self.finish()\n \n-    def write(self, chunk: Union[str, bytes, dict]) -> None:\n+    def write(self, chunk: Union[str, bytes, dict, list]) -> None:\n         \"\"\"Writes the given chunk to the output buffer.\n \n         To write the output to the network, use the `flush()` method below.\n@@ -972,15 +972,10 @@\n         \"\"\"\n         if self._finished:\n             raise RuntimeError(\"Cannot write() after finish()\")\n-        if not isinstance(chunk, (bytes, unicode_type, dict)):\n+        if not isinstance(chunk, (bytes, unicode_type, dict, list)):\n             message = \"write() only accepts bytes, unicode, and dict objects\"\n-            if isinstance(chunk, list):\n-                message += (\n-                    \". Lists not accepted for security reasons; see \"\n-                    + \"http://www.tornadoweb.org/en/stable/web.html#tornado.web.RequestHandler.write\"  # noqa: E501\n-                )\n             raise TypeError(message)\n-        if isinstance(chunk, dict):\n+        if isinstance(chunk, (dict, list)):\n             chunk = escape.json_encode(chunk)\n             self.set_header(\"Content-Type\", \"application/json; charset=UTF-8\")\n         chunk = utf8(chunk)\n"
+    },
+    {
+      "id": "real_37__baseline__tornado_6_5_5__clean",
+      "run": "real_37",
+      "runner": "baseline",
+      "model": "gemini-3.7-flash",
+      "task_id": "tornado_6_5_5__clean",
+      "truth": {
+        "is_vulnerable": false,
+        "source": "GHSA-qjxf-f2mg-c6mc",
+        "language": "python",
+        "test_cmd": null,
+        "fix_touched_lines": [
+          1
+        ]
+      },
+      "canary": {
+        "patch_applied": false,
+        "patch_passed_test": null
+      },
+      "confidence": 0.95,
+      "rationale": "`ValueError` does not format string arguments passed as separate positional arguments like logging methods do. Line 441 accidentally uses a comma instead of `%` (`raise ValueError(\"Unsafe header value %r\", retval)`), resulting in an unformatted format string and multiple exception arguments rather t",
+      "patch": "--- a/tornado/web.py\n+++ b/tornado/web.py\n@@ -441,3 +441,3 @@\n         if RequestHandler._VALID_HEADER_CHARS.fullmatch(retval) is None:\n-            raise ValueError(\"Unsafe header value %r\", retval)\n+            raise ValueError(\"Unsafe header value %r\" % retval)\n         return retval\n"
+    },
+    {
+      "id": "real_37__solution__dulwich_1_2_5",
+      "run": "real_37",
+      "runner": "solution",
+      "model": "gemini-3.7-flash",
+      "task_id": "dulwich_1_2_5",
+      "truth": {
+        "is_vulnerable": true,
+        "source": "GHSA-897w-fcg9-f6xj",
+        "language": "python",
+        "test_cmd": "python3 -m pytest -q -p no:cacheprovider -o addopts='' tests/porcelain/__init__.py::FormatPatchTests::test_format_patch_subject_cannot_escape_outdir tests/porcelain/__init__.py::FormatPatchTests::test_format_patch_long_subject_truncated tests/porcelain/__init__.py::SubmoduleTests::test_update_rejects_dotgit_path tests/porcelain/__init__.py::SubmoduleTests::test_update_rejects_parent_traversal_path tests/porcelain/__init__.py::SubmoduleTests::test_check_submodule_path",
+        "fix_touched_lines": [
+          174,
+          177,
+          180,
+          184
+        ]
+      },
+      "canary": {
+        "patch_applied": false,
+        "patch_passed_test": null
+      },
+      "confidence": 0.95,
+      "rationale": "patch_filename hardcoded the 'a/' prefix and lacked a prefix parameter, causing diff headers to erroneously generate 'diff --git a/... a/...' and '+++ a/...' instead of using 'b/...' for new file paths. Furthermore, gen_diff_header prematurely replaced None paths with the opposite path, causing adde",
+      "patch": "--- a/dulwich/patch.py\n+++ b/dulwich/patch.py\n@@ -481,7 +481,7 @@\n-def patch_filename(p: bytes | str | None) -> bytes:\n+def patch_filename(p: bytes | str | None, prefix: bytes = b\"a/\") -> bytes:\n     if p is None:\n         return b\"/dev/null\"\n     else:\n         if isinstance(p, str):\n             p = os.fsencode(p)\n-        return b\"a/\" + p\n+        return prefix + p\n \n \n@@ -498,13 +498,15 @@\n     \"\"\"Generate a diff header.\"\"\"\n     lines = []\n-    if old_path is None:\n-        old_path = new_path\n-    if new_path is None:\n-        new_path = old_path\n     if isinstance(old_path, str):\n         old_path = os.fsencode(old_path)\n     if isinstance(new_path, str):\n         new_path = os.fsencode(new_path)\n-    lines.append(b\"diff --git \" + patch_filename(old_path) + b\" \" + patch_filename(new_path) + b\"\\n\")\n+    lines.append(\n+        b\"diff --git \"\n+        + patch_filename(old_path or new_path, b\"a/\")\n+        + b\" \"\n+        + patch_filename(new_path or old_path, b\"b/\")\n+        + b\"\\n\"\n+    )\n     if old_mode != new_mode:\n         if old_mode is not None:\n@@ -529,6 +531,6 @@\n                 + (f\" {new_mode:o}\".encode(\"ascii\") if new_mode is not None else b\"\")\n                 + b\"\\n\"\n             )\n-        lines.append(b\"--- \" + patch_filename(old_path) + b\"\\n\")\n-        lines.append(b\"+++ \" + patch_filename(new_path) + b\"\\n\")\n+        lines.append(b\"--- \" + patch_filename(old_path, b\"a/\") + b\"\\n\")\n+        lines.append(b\"+++ \" + patch_filename(new_path, b\"b/\") + b\"\\n\")\n     return b\"\".join(lines)\n"
+    },
+    {
+      "id": "real_37__solution__loguru_0_5_3",
+      "run": "real_37",
+      "runner": "solution",
+      "model": "gemini-3.7-flash",
+      "task_id": "loguru_0_5_3",
+      "truth": {
+        "is_vulnerable": true,
+        "source": "GHSA-39ph-wr67-j4xq",
+        "language": "python",
+        "test_cmd": "python3 -m pytest -q -p no:cacheprovider -o addopts='' tests/test_formatting.py::test_non_string_message tests/test_formatting.py::test_non_string_message_is_str_in_record tests/test_formatting.py::test_missing_positional_field_during_formatting tests/test_formatting.py::test_missing_named_field_during_formatting tests/test_formatting.py::test_not_formattable_message tests/test_formatting.py::test_not_formattable_message_with_colors",
+        "fix_touched_lines": [
+          2,
+          69,
+          88,
+          187,
+          204
+        ]
+      },
+      "canary": {
+        "patch_applied": true,
+        "patch_passed_test": false
+      },
+      "confidence": 1,
+      "rationale": "In Handler.emit(), when colorize is enabled, the formatter is static, and colored_message is None, self._precolorized_formats[level_id] returns a tuple (colored, precomputed_format). Line 149 assigns this tuple directly to precomputed_format instead of unpacking it (_, precomputed_format = ...), cau",
+      "patch": "--- a/loguru/_handler.py\n+++ b/loguru/_handler.py\n@@ -146,7 +146,7 @@\n             elif not self._colorize:\n                 formatted = self._decolorized_format.format_map(formatter_record)\n             elif colored_message is None:\n-                precomputed_format = self._precolorized_formats[level_id]\n+                _, precomputed_format = self._precolorized_formats[level_id]\n                 formatted = precomputed_format.format_map(formatter_record)\n             else:\n                 ansi_level = self._levels_ansi_codes[level_id]\n"
+    }
+  ]
+}

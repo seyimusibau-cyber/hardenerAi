@@ -158,3 +158,60 @@ test("validating one patch does not contaminate the next", () => {
     assert.strictEqual(second.validated, true, second.reason);
   } finally { cleanup(dir); }
 });
+
+// --- the apply ladder ---------------------------------------------------
+// Models get two mechanical things wrong often enough to matter: they omit the
+// a/ b/ path prefixes, and they miscount the @@ hunk header. Measured on 33
+// recorded model patches, tolerating both took gate 1 from 8/33 to 22/33 with
+// no regressions. These pin the two rungs that did it.
+import { mkdtempSync as mk, writeFileSync as wf } from "node:fs";
+
+function repoWith(file, body) {
+  const dir = mk(join(tmpdir(), "ladder-"));
+  wf(join(dir, file), body);
+  execFileSync("git", ["init", "-q"], { cwd: dir });
+  execFileSync("git", ["add", "-A"], { cwd: dir });
+  execFileSync("git", ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "x"], { cwd: dir });
+  return dir;
+}
+
+test("gate 1 accepts a diff written without a/ b/ prefixes", () => {
+  const dir = repoWith("cart.mjs", BUGGY);
+  try {
+    // -p1 would strip "cart.mjs" itself and look for a file that isn't there.
+    const patch = `--- cart.mjs\n+++ cart.mjs\n@@ -1,4 +1,4 @@\n export function applyDiscount(total, pct) {\n   // pct arrives as 0-100\n-  return total - (total * pct);\n+  return total - (total * pct / 100);\n }\n`;
+    assert.strictEqual(patchApplies(dir, patch), true);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("gate 1 accepts a diff whose hunk header miscounts its own lines", () => {
+  const dir = repoWith("cart.mjs", BUGGY);
+  try {
+    // Header claims 9 lines; the body has 4. Plain git apply calls this a
+    // "corrupt patch" and throws the candidate away.
+    const patch = `--- a/cart.mjs\n+++ b/cart.mjs\n@@ -1,9 +1,9 @@\n export function applyDiscount(total, pct) {\n   // pct arrives as 0-100\n-  return total - (total * pct);\n+  return total - (total * pct / 100);\n }\n`;
+    assert.strictEqual(patchApplies(dir, patch), true);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("a patch that needs a fallback rung still reaches gate 3", () => {
+  // Regression: --check used the whole ladder but the real apply hardcoded
+  // --3way, so every diff that needed a fallback died as "patch passed --check
+  // but failed to apply" and could never be proven either way.
+  const dir = repoWith("cart.mjs", BUGGY);
+  try {
+    const patch = `--- cart.mjs\n+++ cart.mjs\n@@ -1,4 +1,4 @@\n export function applyDiscount(total, pct) {\n   // pct arrives as 0-100\n-  return total - (total * pct);\n+  return total - (total * pct / 100);\n }\n`;
+    const r = validatePatch(dir, patch, REAL_TEST, "javascript");
+    assert.strictEqual(r.applied, true);
+    assert.notStrictEqual(r.reason, "patch passed --check but failed to apply");
+    assert.strictEqual(r.validated, true, "fails before, passes after — a real fix");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("gate 1 still refuses a diff that targets a file the repo does not have", () => {
+  const dir = repoWith("cart.mjs", BUGGY);
+  try {
+    const patch = `--- a/nope.mjs\n+++ b/nope.mjs\n@@ -1,1 +1,1 @@\n-a\n+b\n`;
+    assert.strictEqual(patchApplies(dir, patch), false, "permissive is not unconditional");
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});

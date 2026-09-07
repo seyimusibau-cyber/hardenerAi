@@ -1,5 +1,13 @@
 # Hardener — Build Roadmap & Status
 
+> **Historical build log.** For current status and the forward plan, see
+> [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md); where the two disagree,
+> that file wins. Several ✅ below were later found to be asserted rather than
+> executed — patch validation credited tests that never failed, and the
+> false-positive harness was four hand-written fixtures scoring only the
+> verifier's judgement. Both are measured properly now in
+> `worker/bench/offline/`.
+
 The product had a hole in the middle: a strong shell (auth, domain verification,
 billing, AI verifier) wrapped around a **scanner that was never built**. This
 roadmap closed that loop and built outward across all phases.

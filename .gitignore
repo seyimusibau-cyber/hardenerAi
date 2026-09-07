@@ -22,7 +22,31 @@
 
 # misc
 .DS_Store
+
+# private keys, certificates & credentials
 *.pem
+*.key
+*.cert
+*.crt
+*.pfx
+*.p12
+*.secret
+*.token
+*credentials*.json
+*service-account*.json
+.secrets
+
+# local databases & state
+.db_updated
+*.sqlite
+*.sqlite3
+*.db
+
+# sql scripts (ignore ad-hoc, manual & dump scripts, keep migrations & schema)
+*.sql
+!supabase/schema.sql
+!supabase/migrations/
+!supabase/migrations/*.sql
 
 # debug
 npm-debug.log*
@@ -32,6 +56,8 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
+!env.template
 
 # vercel
 .vercel
@@ -39,3 +65,4 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+

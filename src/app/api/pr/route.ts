@@ -1,4 +1,5 @@
 import { handleError } from '@/lib/error-handler';
+import { parseGitHubRepo } from '@/lib/target';
 import { rateLimit } from '@/lib/rate-limiter';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
@@ -9,9 +10,31 @@ import { parseDiffPath, applyUnifiedDiff } from '@/lib/apply-diff';
 // remediation diff. Single-file diffs are applied to real content; if the diff
 // can't be applied cleanly, we still open a PR with the diff attached so a human
 // can apply it (rule book: keep a human in the loop).
-function parseRepo(url: string): { owner: string; repo: string } | null {
-    const m = url.match(/github\.com[/:]([^/]+)\/([^/.]+)/);
-    return m ? { owner: m[1], repo: m[2] } : null;
+// Which repositories this deployment may open a pull request on.
+//
+// This route acts with ONE shared credential — `GITHUB_TOKEN`, the operator's
+// own account. It verifies the finding belongs to the caller's scan, then takes
+// the repository from that scan's target. Before the git/web split in
+// `/api/scan`, no user could scan a repository at all, so this was unreachable.
+// The moment repository scans work, an unrestricted version of this route lets
+// any signed-up stranger scan any public repository and have Hardener push a
+// branch and open a pull request on it FROM THE OPERATOR'S ACCOUNT. Rate limits
+// bound the volume; they do not change whose name is on the commit.
+//
+// So: deny by default, and allow only repositories the operator has explicitly
+// listed. `PR_ALLOWED_REPOS=owner/repo,owner/other` — unset means the feature is
+// off entirely.
+//
+// This is a holding measure, not the design. The real fix is the GitHub App
+// (IMPLEMENTATION_PLAN.md §1.6): the user installs it on their own repositories,
+// the token is theirs and expires hourly, and pull requests come from Hardener
+// rather than from the operator. When that lands, this allow-list is replaced by
+// "does this user have an installation covering this repository".
+function prAllowList(): string[] {
+    return (process.env.PR_ALLOWED_REPOS || '')
+        .split(',')
+        .map((r) => r.trim().toLowerCase())
+        .filter(Boolean);
 }
 
 async function gh(path: string, token: string, init?: RequestInit) {
@@ -50,8 +73,22 @@ export async function POST(request: Request) {
         const diff = finding.unified_diff;
         if (!diff) return NextResponse.json({ error: 'Finding has no remediation diff' }, { status: 400 });
 
-        const repo = parseRepo(fscan!.target_url);
+        const repo = parseGitHubRepo(fscan!.target_url);
         if (!repo) return NextResponse.json({ error: 'Target is not a GitHub repo' }, { status: 400 });
+
+        // Deny by default. See prAllowList() above for why this exists.
+        const allowed = prAllowList();
+        if (allowed.length === 0) {
+            return NextResponse.json({
+                error: 'Opening pull requests is not enabled on this deployment.',
+            }, { status: 501 });
+        }
+        if (!allowed.includes(`${repo.owner}/${repo.repo}`.toLowerCase())) {
+            return NextResponse.json({
+                error: 'Hardener cannot open a pull request on this repository. '
+                     + 'Download the patch and apply it yourself, or connect the repository once GitHub App support ships.',
+            }, { status: 403 });
+        }
 
         // Base branch + latest commit/tree
         const repoInfo = await gh(`/repos/${repo.owner}/${repo.repo}`, token);

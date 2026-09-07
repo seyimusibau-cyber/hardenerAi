@@ -34,9 +34,19 @@ COPY package.json ./
 RUN npm install --omit=dev
 COPY *.mjs ./
 
-# git needs an identity for `git apply --3way` / stash
-RUN git config --global user.email "worker@hardener.ai" \
-    && git config --global user.name "Hardener Worker" \
-    && git config --global init.defaultBranch main
+# This container runs code it does not trust: an LLM-written test, executed
+# inside a stranger's repository. So it runs as a fixed non-root uid, with a
+# read-only root filesystem and a tmpfs for /tmp supplied at `docker run` time
+# (see worker/server.mjs). Nothing here is writable at runtime.
+RUN useradd --uid 10001 --create-home --shell /usr/sbin/nologin hardener \
+    && chmod -R a+rX /app
+
+# git identity is NOT set here. A global config would live in root's home, which
+# uid 10001 cannot read; server.mjs passes GIT_AUTHOR_* / GIT_COMMITTER_* and
+# GIT_CONFIG_GLOBAL=/dev/null instead, so the identity travels with the run.
+ENV GIT_CONFIG_GLOBAL=/dev/null \
+    HOME=/tmp
+
+USER 10001:10001
 
 CMD ["node", "scan.mjs"]

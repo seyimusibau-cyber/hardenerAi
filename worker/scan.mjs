@@ -6,6 +6,7 @@ import { classifyTarget, cloneRepo, detectLanguage, runSemgrep, runGitleaks, run
 import { createHash } from "node:crypto";
 import { verifyFinding } from "./verifier.mjs";
 import { validatePatch } from "./validate.mjs";
+import { completeness } from "./report.mjs";
 import { rmSync } from "node:fs";
 
 const {
@@ -16,9 +17,36 @@ const {
   APP_URL, NOTIFY_SECRET,
 } = process.env;
 
-const DRY = process.env.DRY_RUN === "1";  // local verification: no Supabase/Fly needed
+// DRY_RUN started as a local debug aid. It is now also the production
+// transport, because it is what lets a scan run with NO database credential.
+//
+// The scanner executes code it does not trust: `validate.mjs` runs a test an
+// LLM wrote, inside a stranger's repository. `childEnv()` keeps the keys out of
+// that test's environment, which stops an accidental leak — but the test runs as
+// the same user in the same container as this process, so `/proc/<pid>/environ`
+// is readable and a deliberate one still works.
+//
+// The fix is to not hold the secret here at all. Under DRY_RUN this process
+// prints its results to stdout and writes nothing; the host reads them back and
+// does the database write itself. The container never sees SUPABASE_SERVICE_KEY.
+const DRY = process.env.DRY_RUN === "1";
 const supabase = DRY ? null : createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, { auth: { persistSession: false } });
 const started = Date.now();
+
+// Everything the host needs to finish the job, accumulated as the scan runs.
+const dryScan = {};
+let dryRows = [];
+
+// Fenced so it survives anything else the scanners printed to stdout. The host
+// splits on this marker rather than guessing which line is the payload.
+const RESULT_FENCE = "---HARDENER-RESULT---";
+let emitted = false;
+function emitResult() {
+  if (!DRY || emitted) return;
+  emitted = true;
+  process.stdout.write(`\n${RESULT_FENCE}\n` +
+    JSON.stringify({ scan: dryScan, findings: dryRows }) + `\n`);
+}
 
 // Global wall-clock guard: a runaway scan marks itself Failed rather than
 // hanging the machine forever (Phase 2: timeout caps).
@@ -50,7 +78,13 @@ async function cachedVerify(fp, snippet, sarif, verify) {
 }
 
 async function setScan(fields) {
-  if (DRY) { if (fields.status || fields.progress === 100) console.log(`[dry] scan:`, JSON.stringify(fields)); return; }
+  if (DRY) {
+    // Accumulated rather than written. Progress goes to stderr so it stays out
+    // of the fenced payload on stdout.
+    Object.assign(dryScan, fields);
+    if (fields.status) console.error(`[dry] status -> ${fields.status}`);
+    return;
+  }
   await supabase.from("scans").update({ ...fields, updated_at: new Date().toISOString() }).eq("id", SCAN_ID);
 }
 
@@ -82,6 +116,12 @@ async function main() {
 
     total = results.length;
     results = results.slice(0, Number(MAX_FINDINGS)); // cost + latency cap
+    // `total` is what the scanners raised; `assessed` is what this scan actually
+    // looked at. Every completeness check below MUST use `assessed`. Comparing
+    // against `total` passes silently on any repo with more findings than the
+    // cap -- which is how a dead verifier reported grade A the first time, and
+    // the cap makes that the common case, not the edge case.
+    const assessed = results.length;
 
     let confirmed = 0, patchHours = 0, verifyErrors = 0;
     const rows = [];
@@ -132,8 +172,9 @@ async function main() {
       await setScan({ progress: 30 + Math.round((60 * (i + 1)) / results.length) });
     }
 
+    dryRows = rows;
     if (DRY) {
-      console.log(JSON.stringify({ total, confirmed, findings: rows }, null, 2));
+      // Nothing written here — the host does it, from the fenced payload.
     } else if (rows.length) {
       // Idempotent: a QStash retry re-runs this scan; clear prior rows first so
       // findings aren't double-inserted.
@@ -145,9 +186,12 @@ async function main() {
     // If nothing could be verified, the scan learned nothing. Reporting that as
     // a clean result is the most dangerous thing this worker could do, so it
     // fails loudly instead and the user is told why.
-    if (total > 0 && verifyErrors === total) {
+    const { truncated, noneVerified, scoreIsPartial } =
+      completeness({ total, assessed, verifyErrors });
+    if (noneVerified) {
       throw new Error(
-        `verification unavailable: all ${total} finding(s) failed to verify. ` +
+        `verification unavailable: all ${assessed} assessed finding(s) failed to verify` +
+        (truncated ? ` (of ${total} raised)` : ``) + `. ` +
         `No security conclusion can be drawn from this scan. ` +
         `Check GEMINI_API_KEY and that GEMINI_MODEL is a model this key can reach.`
       );
@@ -175,19 +219,27 @@ async function main() {
       time_taken: `${Math.round((Date.now() - started) / 1000)}s`,
       checks: {
         semgrep_total: total, verified: confirmed, patches_validated: validatedCount,
+        // How many of `total` this scan actually assessed. When `truncated` is
+        // true the cap hid the rest, so `score` is computed from a sample and
+        // a big repo can outscore a small one purely by overflowing the cap.
+        assessed, truncated, max_findings: Number(MAX_FINDINGS),
         // Non-zero means some findings were never assessed, so `score` is an
         // upper bound on the problems present, not a measurement of them.
         verify_errors: verifyErrors,
-        score_is_partial: verifyErrors > 0,
+        score_is_partial: scoreIsPartial,
       },
     });
     const appliedCount = rows.filter((x) => x.patch_applies).length;
     // Reported separately on purpose: "applied" and "validated" are different
     // claims, and only the second one means the defect is actually repaired.
-    console.log(`[scan ${SCAN_ID}] done: ${confirmed}/${total} confirmed, ` +
+    console.log(`[scan ${SCAN_ID}] done: ${confirmed}/${assessed} confirmed, ` +
                 `${appliedCount} patches applied, ${validatedCount} proven by execution`);
+    if (truncated) {
+      console.warn(`[scan ${SCAN_ID}] WARNING: ${assessed} of ${total} finding(s) assessed ` +
+                   `(MAX_FINDINGS=${MAX_FINDINGS}). The score is computed from that sample only.`);
+    }
     if (verifyErrors > 0) {
-      console.warn(`[scan ${SCAN_ID}] WARNING: ${verifyErrors}/${total} finding(s) could not be ` +
+      console.warn(`[scan ${SCAN_ID}] WARNING: ${verifyErrors}/${assessed} finding(s) could not be ` +
                    `verified. The score is an upper bound, not a clean bill of health.`);
     }
 
@@ -206,8 +258,15 @@ async function main() {
   }
 }
 
-main().catch(async (err) => {
-  console.error(`[scan ${SCAN_ID}] fatal: ${err?.message}`);
-  try { await setScan({ status: "Failed", progress: 100, error_message: String(err?.message || err).slice(0, 500) }); } catch {}
-  process.exit(1);
-});
+main()
+  .then(() => emitResult())
+  .catch(async (err) => {
+    console.error(`[scan ${SCAN_ID}] fatal: ${err?.message}`);
+    try {
+      await setScan({ status: "Failed", progress: 100, error_message: String(err?.message || err).slice(0, 500) });
+    } catch {}
+    // Emit on the failure path too: a host that gets no payload cannot tell a
+    // crashed scan from a killed container, and would leave the row Running.
+    emitResult();
+    process.exit(1);
+  });

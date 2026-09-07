@@ -3,6 +3,7 @@ import { NextResponse, NextRequest } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
 import { rateLimit } from '@/lib/rate-limiter';
 import { UrlSchema } from '@/lib/sanitization';
+import { classifyTarget, parseGitHubRepo, repoCloneUrl } from '@/lib/target';
 import { Client } from '@upstash/qstash';
 
 const qstash = new Client({
@@ -44,6 +45,25 @@ export async function POST(request: Request) {
         const urlObj = new URL(normalized.startsWith('http') ? normalized : `https://${normalized}`);
         const hostname = urlObj.hostname;
 
+        // Which authorization rule applies depends on WHAT is being scanned.
+        // See src/lib/target.ts — this is a security control, not routing.
+        const targetType = classifyTarget(normalized);
+        const repo = targetType === 'git' ? parseGitHubRepo(normalized) : null;
+
+        if (targetType === 'git' && !repo) {
+            // A git-shaped target we could not parse as a GitHub repository.
+            // Refused rather than passed through: only github.com is supported,
+            // and a scanner that clones from anywhere is a far larger attack
+            // surface than one that clones from a single known host.
+            return NextResponse.json({
+                error: 'Only GitHub repositories are supported, in the form https://github.com/owner/repo',
+            }, { status: 400 });
+        }
+
+        // Rebuilt from the parsed parts, never from the raw string the user
+        // sent, so nothing reaches `git clone` that we did not construct.
+        const scanTarget = repo ? repoCloneUrl(repo) : normalized;
+
         // 1. Target Blacklisting
         const restrictedTlds = ['.gov', '.mil'];
         const isRestrictedTld = restrictedTlds.some(tld => hostname.endsWith(tld));
@@ -58,19 +78,30 @@ export async function POST(request: Request) {
             }
         }
 
-        // 2. Domain Verification Check (Authorization for DAST)
-        const { data: verification } = await supabase
-            .from('domain_verifications')
-            .select('*')
-            .eq('user_id', user.id)
-            .eq('domain', hostname)
-            .eq('status', 'verified')
-            .single();
+        // 2. Domain verification — authorization for ACTIVE testing.
+        //
+        // Only for `web` targets. Scanning a live host you do not own is an
+        // intrusion, so proof of ownership is mandatory there. Reading a public
+        // repository is not: it is reading something already published, which
+        // is how every SAST tool works.
+        //
+        // This check used to run for every target. A GitHub URL has the
+        // hostname `github.com`, which nobody can prove ownership of, so every
+        // repository scan returned 403 and no user could scan anything at all.
+        if (targetType === 'web') {
+            const { data: verification } = await supabase
+                .from('domain_verifications')
+                .select('*')
+                .eq('user_id', user.id)
+                .eq('domain', hostname)
+                .eq('status', 'verified')
+                .single();
 
-        if (!verification) {
-            return NextResponse.json({
-                error: 'Domain not verified. You must verify ownership of this domain before scanning.'
-            }, { status: 403 });
+            if (!verification) {
+                return NextResponse.json({
+                    error: 'Domain not verified. You must verify ownership of this domain before scanning it.'
+                }, { status: 403 });
+            }
         }
 
         // 2b. Quota enforcement (Phase 3). Plan limits live on the profile; the
@@ -108,7 +139,9 @@ export async function POST(request: Request) {
         // 3. Queue the Scan
         const { data: scan, error: scanError } = await supabase.from('scans').insert({
             user_id: user.id,
-            target_url: normalized,
+            // Canonical form, so the worker clones what we parsed rather
+            // than what the user typed.
+            target_url: scanTarget,
             status: 'Queued',
             progress: 0,
         }).select().single();
@@ -127,7 +160,7 @@ export async function POST(request: Request) {
             url: `${process.env.NEXT_PUBLIC_APP_URL}/api/webhooks/qstash`,
             body: {
                 scanId: scan.id,
-                targetUrl: normalized
+                targetUrl: scanTarget
             }
         });
 

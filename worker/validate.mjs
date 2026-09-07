@@ -59,16 +59,50 @@ function writePatch(unifiedDiff) {
   return patchFile;
 }
 
-export function patchApplies(repoDir, unifiedDiff) {
-  if (!unifiedDiff || !unifiedDiff.trim()) return false;
+// How a model-written diff is coaxed into applying, strictest first.
+//
+// Measured on 33 recorded model patches against real CVEs (see
+// bench/offline/): --3way plus a plain retry -- what this used to do -- applied
+// 8. Canary's applier, which also tried -p0, got 20 on the same input. The two
+// things models get wrong are mechanical and worth tolerating:
+//
+//   -p0        the diff says `--- requests/utils.py`, with no a/ b/ prefix, so
+//              -p1 strips a real path segment and the file "does not exist".
+//   --recount  the @@ header line counts disagree with the hunk body, which
+//              git rejects outright as "corrupt patch".
+//
+// Being permissive HERE is safe only because gates 2 and 3 exist. This gate
+// answers "can the patch be placed on the tree at all"; whether it repairs
+// anything is decided by running the test, not by git's willingness to apply.
+// Without fail-before/pass-after, this ladder would be a way to inflate a
+// success number -- with them, it just stops discarding real candidates.
+const APPLY_LADDER = [
+  ["--3way"],
+  [],                      // plain -p1
+  ["-p0"],
+  ["--recount"],
+  ["--recount", "-p0"],
+];
+
+// Returns the first ladder rung that git accepts, or null. The winning rung is
+// returned rather than a boolean so the real apply in gate 3 uses the SAME
+// arguments -- checking with one strategy and applying with another produced
+// "patch passed --check but failed to apply" for every diff that needed a
+// fallback.
+export function resolveApply(repoDir, unifiedDiff) {
+  if (!unifiedDiff || !unifiedDiff.trim()) return null;
   const patchFile = writePatch(unifiedDiff);
-  try {
-    run("git", ["apply", "--check", "--3way", patchFile], { cwd: repoDir });
-    return true;
-  } catch {
-    try { run("git", ["apply", "--check", patchFile], { cwd: repoDir }); return true; }
-    catch { return false; }
+  for (const args of APPLY_LADDER) {
+    try {
+      run("git", ["apply", "--check", ...args, patchFile], { cwd: repoDir });
+      return { args, patchFile };
+    } catch { /* next rung */ }
   }
+  return null;
+}
+
+export function patchApplies(repoDir, unifiedDiff) {
+  return resolveApply(repoDir, unifiedDiff) !== null;
 }
 
 // Runs the generated test in repoDir. Returns true if it passed. Never throws.
@@ -89,7 +123,8 @@ function testPasses(repoDir, runner, unitTest) {
 // fail before and pass after, then restores the tree.
 // Returns { applied, validated, failedBefore, reason }. Never throws.
 export function validatePatch(repoDir, unifiedDiff, unitTest, language) {
-  const applied = patchApplies(repoDir, unifiedDiff);
+  const resolved = resolveApply(repoDir, unifiedDiff);
+  const applied = resolved !== null;
   if (!applied) {
     return { applied: false, validated: false, failedBefore: false,
              reason: "patch does not apply" };
@@ -119,10 +154,10 @@ export function validatePatch(repoDir, unifiedDiff, unitTest, language) {
                reason: "test passed before the patch, so it does not exercise the defect" };
     }
 
-    // Gate 3 — and pass once the patch is applied.
-    const patchFile = writePatch(unifiedDiff);
+    // Gate 3 — and pass once the patch is applied. Same rung that passed
+    // --check above; anything else re-runs the failure this already ruled out.
     try {
-      run("git", ["apply", "--3way", patchFile], { cwd: repoDir });
+      run("git", ["apply", ...resolved.args, resolved.patchFile], { cwd: repoDir });
     } catch {
       return { applied, validated: false, failedBefore,
                reason: "patch passed --check but failed to apply" };

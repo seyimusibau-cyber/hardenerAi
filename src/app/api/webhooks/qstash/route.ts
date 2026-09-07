@@ -1,4 +1,5 @@
 import { handleError } from '@/lib/error-handler';
+import { dispatchScan, RunnerUnavailableError, RunnerBusyError } from '@/lib/runner';
 import { NextResponse } from 'next/server';
 import { Receiver } from '@upstash/qstash';
 import { createClient } from '@supabase/supabase-js';
@@ -55,39 +56,39 @@ export async function POST(req: Request) {
         return NextResponse.json({ success: true, skipped: 'already processed' });
     }
 
-    // 3. Trigger Fly.io Machine (Ephemeral Docker Worker)
-    // The worker will pull the code/target, run Semgrep/Gitleaks/Nmap, and write SARIF to Supabase Storage.
-    const flyToken = process.env.FLY_API_TOKEN;
-    const flyApp = process.env.FLY_APP_NAME;
-
-    if (flyToken && flyApp) {
-        await fetch(`https://api.machines.dev/v1/apps/${flyApp}/machines`, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${flyToken}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                config: {
-                    image: 'registry.fly.io/hardener-scanner:latest',
-                    // Only per-scan vars are passed here. Static secrets
-                    // (GEMINI_API_KEY, SUPABASE_URL, SUPABASE_SERVICE_KEY) are
-                    // set once as Fly app secrets and inherited by the machine,
-                    // so the service-role key never travels in this payload.
-                    //   fly secrets set GEMINI_API_KEY=... SUPABASE_URL=... SUPABASE_SERVICE_KEY=...
-                    env: {
-                        SCAN_ID: scanId,
-                        TARGET_URL: targetUrl,
-                    },
-                    auto_destroy: true, // Machine deletes itself after exit
-                }
-            })
-        });
-    } else {
-        console.log('Skipping Fly.io machine creation - missing tokens. Simulating for dev.');
+    // 3. Hand the scan to a runner. A scan we cannot run must be marked
+    // Failed here -- leaving it Running with nothing running it is the state
+    // this webhook used to produce on every deploy without a Fly token.
+    try {
+        const runner = await dispatchScan(scanId, targetUrl);
+        return NextResponse.json({ success: true, runner });
+    } catch (dispatchErr) {
+        // Transient: the runner exists but was starting up or busy. Leave the
+        // scan Queued and answer non-2xx so QStash retries it. Marking it
+        // Failed here would turn a 50-second cold start into a dead scan.
+        if (dispatchErr instanceof RunnerBusyError) {
+            await supabaseAdmin
+                .from('scans')
+                .update({ status: 'Queued' })
+                .eq('id', scanId);
+            console.warn('QStash dispatch deferred:', dispatchErr.message);
+            return NextResponse.json(
+                { success: false, retrying: true, error: dispatchErr.message },
+                { status: 503 }
+            );
+        }
+        const reason = dispatchErr instanceof RunnerUnavailableError
+            ? dispatchErr.message
+            : 'The scan could not be handed to a runner.';
+        await supabaseAdmin
+            .from('scans')
+            .update({ status: 'Failed', progress: 100, error_message: reason.slice(0, 500) })
+            .eq('id', scanId);
+        console.error('QStash dispatch failed:', dispatchErr);
+        // 200 on purpose: a missing runner is a configuration problem, and a
+        // QStash retry storm will not conjure one. The scan already says why.
+        return NextResponse.json({ success: false, error: reason }, { status: 200 });
     }
-
-    return NextResponse.json({ success: true });
   } catch (err) {
     console.error('QStash Webhook Error:', err);
     return handleError(err);
