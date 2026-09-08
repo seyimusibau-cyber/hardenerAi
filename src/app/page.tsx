@@ -301,11 +301,11 @@ export default function Home() {
                         <Link href="/" className="flex items-center gap-2">
                             <img
                                 src="/logo.png"
-                                alt="HardenerPlus Logo"
+                                alt="Vultix Logo"
                                 className="w-8 h-8 rounded-lg object-contain border border-slate-800"
                             />
                             <span className="text-xl font-bold tracking-tight text-white">
-                                Hardener<span className="text-emerald-500">Plus</span>
+                                Vult<span className="text-emerald-500">ix</span>
                             </span>
                         </Link>
 
@@ -628,7 +628,7 @@ export default function Home() {
                                                 <div className="space-y-1">
                                                     <h4 className="font-bold text-white text-base">2 Security Vulnerabilities Identified for {scanResult.url}</h4>
                                                     <p className="text-xs text-slate-400 max-w-md mx-auto leading-relaxed">
-                                                        To unlock full remediation code snippets, automated patch tools, and run deep scans, you must sign in and verify ownership of <span className="font-mono text-emerald-400 font-bold">{scanResult.url}</span> by adding a DNS TXT record (<code className="bg-slate-900 px-1.5 py-0.5 rounded text-[11px] text-emerald-300 font-mono">hardener-verification=...</code>).
+                                                        To unlock full remediation code snippets, automated patch tools, and run deep scans, you must sign in and verify ownership of <span className="font-mono text-emerald-400 font-bold">{scanResult.url}</span> by adding a DNS TXT record (<code className="bg-slate-900 px-1.5 py-0.5 rounded text-[11px] text-emerald-300 font-mono">vultix-verification=...</code>).
                                                     </p>
                                                 </div>
                                                 <div className="pt-2 flex flex-col sm:flex-row justify-center gap-3">
@@ -674,7 +674,7 @@ export default function Home() {
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <ScrollReveal variant="slide-up" className="text-center mb-20">
                         <h2 className="text-3xl font-bold text-white mb-4">Seamless Integration. Immediate Results.</h2>
-                        <p className="text-slate-500 uppercase tracking-widest text-xs font-bold">How Hardener Plus Works</p>
+                        <p className="text-slate-500 uppercase tracking-widest text-xs font-bold">How Vultix Works</p>
                     </ScrollReveal>
 
                     <div className="grid md:grid-cols-3 gap-12 relative">
@@ -742,7 +742,7 @@ export default function Home() {
                                     <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
                                 </svg>
                             </div>
-                            <h3 className="text-lg font-bold text-white mb-4">Hardener Plus Engine</h3>
+                            <h3 className="text-lg font-bold text-white mb-4">Vultix Engine</h3>
                             <p className="text-slate-400 leading-relaxed text-sm">
                                 Utilizes advanced heuristics and dynamic profiling to identify sophisticated logical bypasses.
                             </p>
@@ -974,7 +974,7 @@ export default function Home() {
                             </p>
                             <ul className="space-y-4 mb-10 flex-grow">
                                 <li className="flex items-center gap-3 text-sm text-slate-200">
-                                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div> Hardener Plus Advanced Scan
+                                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div> Vultix Advanced Scan
                                 </li>
                                 <li className="flex items-center gap-3 text-sm text-slate-200">
                                     <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div> Exploit Proof Logs
@@ -1011,7 +1011,7 @@ export default function Home() {
                                     <div className="w-1 h-1 rounded-full bg-emerald-500"></div> Vulnerability Monitor
                                 </li>
                             </ul>
-                            <a href="mailto:sales@hardener.ai" className="w-full block text-center bg-slate-800 hover:bg-slate-700 text-white py-3 rounded-lg font-bold transition-all">
+                            <a href="mailto:sales@vultix.co.uk" className="w-full block text-center bg-slate-800 hover:bg-slate-700 text-white py-3 rounded-lg font-bold transition-all">
                                 Contact Sales
                             </a>
                         </div>
@@ -1030,7 +1030,7 @@ export default function Home() {
                     <div className="space-y-4">
                         <div className="p-6 rounded-xl bg-slate-900/40 border border-slate-800 hover:border-slate-700 transition-colors">
                             <h4 className="text-lg font-bold text-white mb-3 flex items-center justify-between">
-                                Does Hardener Plus require source code access?
+                                Does Vultix require source code access?
                                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-emerald-500"><polyline points="6 9 12 15 18 9" /></svg>
                             </h4>
                             <p className="text-slate-400 text-sm leading-relaxed">
@@ -1043,7 +1043,7 @@ export default function Home() {
                                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-emerald-500"><polyline points="6 9 12 15 18 9" /></svg>
                             </h4>
                             <p className="text-slate-400 text-sm leading-relaxed">
-                                Traditional SAST tools generate massive amounts of noise and false positives. Hardener Plus uses dynamic profiling tailored to modern frameworks to detect complex logical bypasses that rules-based engines miss, prioritizing business impact.
+                                Traditional SAST tools generate massive amounts of noise and false positives. Vultix uses dynamic profiling tailored to modern frameworks to detect complex logical bypasses that rules-based engines miss, prioritizing business impact.
                             </p>
                         </div>
                         <div className="p-6 rounded-xl bg-slate-900/40 border border-slate-800 hover:border-slate-700 transition-colors">
@@ -1081,7 +1081,7 @@ export default function Home() {
                                         <path d="m9 12 2 2 4-4" />
                                     </svg>
                                 </div>
-                                <span className="text-xl font-bold text-white tracking-tight">Hardener Plus</span>
+                                <span className="text-xl font-bold text-white tracking-tight">Vultix</span>
                             </div>
                             <p className="text-slate-500 text-sm max-w-xs text-center md:text-left leading-relaxed font-medium">
                                 Advanced security audits for the modern software era. Based on industry-leading security benchmarks.
@@ -1142,7 +1142,7 @@ export default function Home() {
                         </div>
                     </div>
                     <div className="mt-16 text-center text-slate-700 text-[10px] uppercase tracking-[0.3em] font-bold">
-                        &copy; 2026 Hardener Plus // Developed Globally.
+                        &copy; 2026 Vultix // Developed Globally.
                     </div>
                 </div>
             </footer>

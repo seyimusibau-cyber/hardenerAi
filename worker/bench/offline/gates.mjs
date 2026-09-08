@@ -1,10 +1,10 @@
-// Run Hardener's patch gates over the offline corpus. No API key, no spend.
+// Run Vultix's patch gates over the offline corpus. No API key, no spend.
 //
 // Every entry is a real model-generated diff against a real published CVE, and
 // Canary already graded the same diff with its own applier. So this measures
 // two things at once:
-//   1. Hardener's apply rate on real model output (gate 1).
-//   2. Where Hardener's applier DISAGREES with Canary's on identical input --
+//   1. Vultix's apply rate on real model output (gate 1).
+//   2. Where Vultix's applier DISAGREES with Canary's on identical input --
 //      which is a defect in one of the two, never noise.
 //
 // Usage: node worker/bench/offline/gates.mjs [canaryDir]
@@ -28,7 +28,7 @@ function git(args, cwd) {
 function materialize(taskId) {
   const src = join(canaryDir, "tasks/real", taskId, "files");
   if (!existsSync(src)) return null;
-  const dir = mkdtempSync(join(tmpdir(), "hardener-offline-"));
+  const dir = mkdtempSync(join(tmpdir(), "vultix-offline-"));
   cpSync(src, dir, { recursive: true });
   git(["init", "-q"], dir);
   git(["-c", "user.email=b@b", "-c", "user.name=bench", "add", "-A"], dir);
@@ -36,7 +36,7 @@ function materialize(taskId) {
   return dir;
 }
 
-// The applier Hardener shipped before the ladder: --3way, then a plain retry.
+// The applier Vultix shipped before the ladder: --3way, then a plain retry.
 // Kept as the comparison arm so the improvement stays measurable rather than
 // asserted.
 function appliesOldWay(dir, patch) {
@@ -49,26 +49,26 @@ function appliesOldWay(dir, patch) {
 const rows = [];
 for (const e of corpus.entries) {
   const dir = materialize(e.task_id);
-  if (!dir) { rows.push({ ...e, hardener: null, old: null, skipped: "no task files" }); continue; }
+  if (!dir) { rows.push({ ...e, vultix: null, old: null, skipped: "no task files" }); continue; }
   try {
     rows.push({ id: e.id, task_id: e.task_id, model: e.model, runner: e.runner,
-                hardener: patchApplies(dir, e.patch), old: appliesOldWay(dir, e.patch),
+                vultix: patchApplies(dir, e.patch), old: appliesOldWay(dir, e.patch),
                 canary_applied: e.canary.patch_applied, canary_fixed: e.canary.patch_passed_test });
   } finally { rmSync(dir, { recursive: true, force: true }); }
 }
 
 const n = rows.length;
-const hard = rows.filter((r) => r.hardener).length;
+const hard = rows.filter((r) => r.vultix).length;
 const old = rows.filter((r) => r.old).length;
-const gained = rows.filter((r) => r.hardener && !r.old).length;
-const lost = rows.filter((r) => !r.hardener && r.old).length;
+const gained = rows.filter((r) => r.vultix && !r.old).length;
+const lost = rows.filter((r) => !r.vultix && r.old).length;
 const can = rows.filter((r) => r.canary_applied).length;
 const fixed = rows.filter((r) => r.canary_fixed).length;
 
 console.log(`\n  offline patch gates — ${n} real model patches, 0 API calls\n`);
 console.log(`  ${"id".padEnd(46)} ladder  old   canary`);
 for (const r of rows) {
-  console.log(`  ${r.id.slice(0, 46).padEnd(46)} ${String(r.hardener).padEnd(7)} ${String(r.old).padEnd(5)} ${String(r.canary_applied)}`);
+  console.log(`  ${r.id.slice(0, 46).padEnd(46)} ${String(r.vultix).padEnd(7)} ${String(r.old).padEnd(5)} ${String(r.canary_applied)}`);
 }
 console.log(`\n  gate 1, apply ladder:           ${hard}/${n}  (${(100*hard/n).toFixed(0)}%)`);
 console.log(`  gate 1, previous applier:       ${old}/${n}  (${(100*old/n).toFixed(0)}%)`);

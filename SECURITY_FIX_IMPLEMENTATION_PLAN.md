@@ -1,4 +1,4 @@
-# Security Fix Implementation Plan - Hardener AI
+# Security Fix Implementation Plan - Vultix
 
 ## Complete Vulnerability List
 
@@ -767,7 +767,7 @@ Dashboard > Authentication > Settings
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 
 // .env.production
-NEXT_PUBLIC_APP_URL=https://hardener.ai
+NEXT_PUBLIC_APP_URL=https://vultix.co.uk
 
 // src/app/signup/page.tsx
 const handleSignup = async (e: React.FormEvent) => {

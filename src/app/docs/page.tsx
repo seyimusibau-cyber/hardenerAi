@@ -375,7 +375,7 @@ export default function DocsPage() {
                         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.5 3.8 17 5 19 5a1 1 0 0 1 1 1z" /><path d="m9 12 2 2 4-4" /></svg>
                     </Link>
                     <span className="font-bold tracking-tight text-white text-lg">
-                        Hardener<span className="text-emerald-500 font-mono text-xs ml-1 uppercase">Docs</span>
+                        Vultix<span className="text-emerald-500 font-mono text-xs ml-1 uppercase">Docs</span>
                     </span>
                 </div>
                 <Link href="/" className="text-slate-400 hover:text-white transition-colors text-xs font-semibold flex items-center gap-2">
@@ -406,7 +406,7 @@ export default function DocsPage() {
                     <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-5">
                         <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3 font-mono">Platform Standards</h3>
                         <p className="text-xs text-slate-400 leading-relaxed">
-                            Hardener Plus audits align directly with OWASP Top 10 security standards and CIS benchmark guidelines.
+                            Vultix audits align directly with OWASP Top 10 security standards and CIS benchmark guidelines.
                         </p>
                     </div>
                 </aside>

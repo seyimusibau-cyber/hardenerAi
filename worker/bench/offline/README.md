@@ -12,7 +12,7 @@ within 3 lines of a line the real fix touched.
 
 ```
 npm run bench:extract   # rebuild corpus.json from Canary's trajectories
-npm run bench:gates     # run Hardener's patch gates over 33 real model patches
+npm run bench:gates     # run Vultix's patch gates over 33 real model patches
 npm run bench:semgrep   # what the scanners score with no AI at all
 ```
 
@@ -45,14 +45,14 @@ it has not moved.
 
 The AI arm is 4x better than the scanners, which answers the "is the model just
 decoration" question — **but not in a way this pipeline can currently collect.**
-Canary handed the model a whole file and asked it to find the defect. Hardener
+Canary handed the model a whole file and asked it to find the defect. Vultix
 hands the model a Semgrep finding and asks whether it is real: `scan.mjs` only
 ever loops over `runSemgrep + runGitleaks + runOsvScanner` output. The verifier
 is a filter, and a filter can only ever remove findings.
 
 Semgrep raised **zero** findings inside the vulnerable file for 13 of 15 tasks.
 On those the model is never shown the bug and cannot flag it at any price. So
-Semgrep's 9% recall is a hard ceiling on Hardener's recall, and the 0.50 F1
+Semgrep's 9% recall is a hard ceiling on Vultix's recall, and the 0.50 F1
 belongs to an architecture this worker does not have.
 
 That makes the next experiment an architectural one, not a prompt one: give the

@@ -28,7 +28,7 @@ const model = genAI.getGenerativeModel({
 // Never throws — a verify failure yields a conservative "unknown" verdict so
 // one bad finding can't kill the whole scan.
 export async function verifyFinding(codeSnippet, sarifFinding) {
-  const prompt = `You are the security reasoning engine for Hardener AI.
+  const prompt = `You are the security reasoning engine for Vultix.
 
 RAW SCANNER FINDING (SARIF):
 ${JSON.stringify(sarifFinding, null, 2)}

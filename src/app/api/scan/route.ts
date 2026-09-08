@@ -206,7 +206,7 @@ export async function GET(request: Request) {
             const fetchRes = await fetch(targetUrl, {
                 method: 'GET',
                 redirect: 'follow',
-                headers: { 'User-Agent': 'HardenerPlus-Audit/1.0' },
+                headers: { 'User-Agent': 'Vultix-Audit/1.0' },
                 signal: AbortSignal.timeout(4000),
             });
 

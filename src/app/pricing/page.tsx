@@ -21,11 +21,11 @@ export default function PricingPage() {
                         <Link href="/" className="flex items-center gap-2">
                             <img
                                 src="/logo.png"
-                                alt="HardenerPlus Logo"
+                                alt="Vultix Logo"
                                 className="w-6 h-6 rounded-md object-contain border border-slate-800"
                             />
                             <span className="text-lg font-bold tracking-tight text-white">
-                                Hardener<span className="text-emerald-500">Plus</span>
+                                Vult<span className="text-emerald-500">ix</span>
                             </span>
                         </Link>
 

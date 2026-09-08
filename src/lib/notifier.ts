@@ -18,7 +18,7 @@ export async function sendSlack(webhookUrl: string, text: string): Promise<boole
 
 export async function sendEmail(to: string, subject: string, html: string): Promise<boolean> {
     const key = process.env.RESEND_API_KEY;
-    const from = process.env.ALERT_FROM_EMAIL || 'alerts@hardener.ai';
+    const from = process.env.ALERT_FROM_EMAIL || 'alerts@vultix.co.uk';
     if (!key || !to) return false;
     try {
         const res = await fetch('https://api.resend.com/emails', {
@@ -36,7 +36,7 @@ export async function sendEmail(to: string, subject: string, html: string): Prom
 // Format a scan result into a short alert body.
 export function scanAlert(target: string, grade: string | null, vulns: number, appUrl: string, scanId: string): string {
     const link = `${appUrl}/dashboard`;
-    return `🛡️ Hardener scan complete for *${target}*\n` +
+    return `🛡️ Vultix scan complete for *${target}*\n` +
         `Grade: *${grade ?? 'n/a'}*  ·  Confirmed vulnerabilities: *${vulns}*\n` +
         `View findings: ${link} (scan ${scanId})`;
 }

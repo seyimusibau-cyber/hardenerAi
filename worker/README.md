@@ -1,7 +1,7 @@
-# Hardener scanner worker
+# Vultix scanner worker
 
 Ephemeral Fly.io machine that does the actual scanning. Spawned per scan by
-`/api/webhooks/qstash` (image `registry.fly.io/hardener-scanner:latest`,
+`/api/webhooks/qstash` (image `registry.fly.io/vultix-scanner:latest`,
 `auto_destroy=true`).
 
 ## Flow
@@ -19,7 +19,7 @@ Optional: `MAX_FINDINGS` (default 25), `GEMINI_MODEL`.
 cd worker
 fly launch --no-deploy        # first time; creates the app
 fly secrets set GEMINI_API_KEY=... SUPABASE_URL=... SUPABASE_SERVICE_KEY=...
-fly deploy                     # builds + pushes registry.fly.io/hardener-scanner:latest
+fly deploy                     # builds + pushes registry.fly.io/vultix-scanner:latest
 ```
 
 ## Local smoke (no Fly)

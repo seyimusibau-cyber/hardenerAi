@@ -1,6 +1,6 @@
 // The null hypothesis: what does Semgrep score on its own?
 //
-// Hardener is Semgrep + Gitleaks + osv-scanner with a Gemini call on top. The
+// Vultix is Semgrep + Gitleaks + osv-scanner with a Gemini call on top. The
 // AI layer is the whole moat, so the only question that matters is whether it
 // beats the scanner it wraps. Canary already measured the AI arm on these exact
 // 16 tasks. This measures the scanners on the same tasks, with the same grading
@@ -11,7 +11,7 @@
 // finding on a clean control counts as a false positive.
 //
 // Two arms, because they answer different questions:
-//   repo-wide  every Semgrep finding in the tree -- what Hardener actually
+//   repo-wide  every Semgrep finding in the tree -- what Vultix actually
 //              shows a user, and what its score is computed from
 //   scoped     only findings in the file the model was given -- the fair
 //              like-for-like against Canary's AI runs
@@ -83,7 +83,7 @@ for (const r of rows) {
   console.log(`  ${r.id.padEnd(32)} ${String(r.vuln).padEnd(6)}${String(r.all).padEnd(10)}` +
               `${String(r.scoped).padEnd(9)}${r.hitScoped ? "YES" : "no"}`);
 }
-console.log(`\n  repo-wide arm (what Hardener shows):  ${JSON.stringify(prf(arms.repo))}`);
+console.log(`\n  repo-wide arm (what Vultix shows):  ${JSON.stringify(prf(arms.repo))}`);
 console.log(`  scoped arm (fair vs the AI runs):     ${JSON.stringify(prf(arms.scoped))}`);
 console.log(`\n  Compare — Canary's AI baseline on these same tasks:`);
 console.log(`    gemini-3.5-flash  precision 0.556  recall 0.455  f1 0.5    fix rate 0`);

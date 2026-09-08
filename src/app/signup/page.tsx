@@ -107,11 +107,11 @@ export default function SignupPage() {
                         <Link href="/" className="inline-flex items-center gap-2 mb-6 hover:opacity-80 transition-opacity">
                             <img
                                 src="/logo.png"
-                                alt="HardenerPlus Logo"
+                                alt="Vultix Logo"
                                 className="w-6 h-6 rounded-md object-contain border border-slate-800"
                             />
                             <span className="text-xl font-bold tracking-tight text-white">
-                                Hardener<span className="text-emerald-500">Plus</span>
+                                Vult<span className="text-emerald-500">ix</span>
                             </span>
                         </Link>
                         <h1 className="text-2xl font-bold text-white mb-2">Create an Account</h1>

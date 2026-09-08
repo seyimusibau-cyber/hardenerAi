@@ -31,7 +31,7 @@ const {
   SCANNER_SHARED_SECRET,
   SUPABASE_URL,
   SUPABASE_SERVICE_KEY,
-  SCANNER_IMAGE = "hardener-scanner:latest",
+  SCANNER_IMAGE = "vultix-scanner:latest",
   MAX_CONCURRENT_SCANS = "1",
   SCAN_MEMORY = "2g",
   SCAN_CPUS = "1.5",
@@ -61,7 +61,7 @@ if (!SANDBOXED && ALLOW_UNSANDBOXED !== "1") {
 }
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, { auth: { persistSession: false } });
-const RESULT_FENCE = "---HARDENER-RESULT---";
+const RESULT_FENCE = "---VULTIX-RESULT---";
 const running = new Set();
 
 // ---------------------------------------------------------------- signature
@@ -86,10 +86,10 @@ function dockerArgs(scanId, targetUrl) {
     // git needs an identity for `apply --3way` and the stash cycle, and the
     // image's global config lives in root's home, which this user cannot read.
     GIT_CONFIG_GLOBAL: "/dev/null",
-    GIT_AUTHOR_NAME: "Hardener Worker",
-    GIT_AUTHOR_EMAIL: "worker@hardener.ai",
-    GIT_COMMITTER_NAME: "Hardener Worker",
-    GIT_COMMITTER_EMAIL: "worker@hardener.ai",
+    GIT_AUTHOR_NAME: "Vultix Worker",
+    GIT_AUTHOR_EMAIL: "worker@vultix.co.uk",
+    GIT_COMMITTER_NAME: "Vultix Worker",
+    GIT_COMMITTER_EMAIL: "worker@vultix.co.uk",
   };
   // The one credential that may enter the container, and only when the AI
   // verifier is switched on. With VERIFIER=none the container holds nothing at
@@ -99,7 +99,7 @@ function dockerArgs(scanId, targetUrl) {
 
   const args = [
     "run", "--rm",
-    "--name", `hardener-scan-${scanId}`,
+    "--name", `vultix-scan-${scanId}`,
     // Network is required: the scan clones the repository, and the verifier
     // calls the API. Egress is therefore NOT the boundary being defended here —
     // the boundary is that the container holds nothing worth exfiltrating.
@@ -142,7 +142,7 @@ function runScan(scanId, targetUrl) {
     // The container has its own wall-clock guard; this one covers the case
     // where it is too wedged to enforce it.
     const kill = setTimeout(() => {
-      if (SANDBOXED) spawn("docker", ["kill", `hardener-scan-${scanId}`], { stdio: "ignore" });
+      if (SANDBOXED) spawn("docker", ["kill", `vultix-scan-${scanId}`], { stdio: "ignore" });
       else child.kill("SIGKILL");
     }, Number(SCAN_TIMEOUT_MS) + 60_000);
 
@@ -231,7 +231,7 @@ const server = http.createServer((req, res) => {
   });
   req.on("close", () => { if (tooBig && !res.headersSent) json(res, 413, { error: "body too large" }); });
   req.on("end", () => {
-    const bad = verify(raw, req.headers["x-hardener-signature"]);
+    const bad = verify(raw, req.headers["x-vultix-signature"]);
     if (bad) return json(res, 401, { error: bad });
 
     let body;

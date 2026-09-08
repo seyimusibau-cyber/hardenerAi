@@ -50,7 +50,7 @@ export async function verifyAndPatchFinding(codeSnippet: string, sarifFinding: o
   }, { timeout: Number(process.env.GEMINI_TIMEOUT_MS || 60000) });
 
   const prompt = `
-  You are the lead security reasoning engine for Hardener AI.
+  You are the lead security reasoning engine for Vultix.
   
   RAW SCANNER FINDING (SARIF Format):
   ${JSON.stringify(sarifFinding, null, 2)}

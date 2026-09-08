@@ -16,7 +16,7 @@ export async function POST(req: Request) {
 
         if (action === 'generate') {
             // Generate a verification token
-            const token = `hardener-verification=${crypto.randomBytes(16).toString('hex')}`;
+            const token = `vultix-verification=${crypto.randomBytes(16).toString('hex')}`;
             
             // Insert into domain_verifications
             const { data, error } = await supabase.from('domain_verifications').insert({

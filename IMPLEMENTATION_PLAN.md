@@ -1,6 +1,6 @@
-# Hardener — Implementation Plan
+# Vultix — Implementation Plan
 
-**Written 6 September 2026.** This is the plan of record. `HARDENER_ROADMAP.md`
+**Written 6 September 2026.** This is the plan of record. `VULTIX_ROADMAP.md`
 is the historical build log; where the two disagree about status, this file wins.
 
 Four parts, in dependency order. Every step carries a **Proof** line — the thing
@@ -28,7 +28,7 @@ sees `github.com`, and asks them to prove they own github.com. Nobody can. It
 refuses every time. Fix: ask that question only for websites. Reading code that
 is already public is not intrusive. *(§1.1)*
 
-**2. Take your own house keys off the table.** When Hardener offers a fix, it
+**2. Take your own house keys off the table.** When Vultix offers a fix, it
 opens the change request on GitHub *using Seyi's personal account*. That is
 invisible today because nobody can get far enough to trigger it. The moment step
 1 lands, any stranger who signs up can make that account post code changes on any
@@ -50,12 +50,12 @@ scanner host. Tedious, not hard — and the app refuses to start if any are
 missing, so mistakes surface immediately. *(§1.5)*
 
 **6. Let people scan private code.** Everything above covers public code only.
-Private repositories need the screen that says *"Hardener wants access to these 3
+Private repositories need the screen that says *"Vultix wants access to these 3
 repositories. Allow?"* — they choose which, access expires hourly, they can cut it
 off themselves. Biggest single piece of work here. *(§1.6)*
 
 **7. Decide whether launching needs an AI key at all.** Today no key means every
-scan fails. But much of what Hardener does needs no AI: checking whether a
+scan fails. But much of what Vultix does needs no AI: checking whether a
 project's dependencies contain known vulnerabilities is a lookup in a public
 database, like checking a list of recalled products. Exact, free — and today a
 model is being paid to second-guess it, and can delete a real result. So there is
@@ -137,7 +137,7 @@ stayed there forever. The Fly dispatch also never checked its own response.
 
 ### 0.4 A permanent zero-cost bench ✅
 
-Canary's corpus reused as Hardener's: 15 published CVEs with real vulnerable
+Canary's corpus reused as Vultix's: 15 published CVEs with real vulnerable
 trees, 4 clean controls, ground-truth fix lines, and 33 recorded model patches
 from runs already paid for. Grading matches `canary/src/canary/models.py:hit()`
 exactly — a finding is located if it lands within 3 lines of a line the real fix
@@ -145,7 +145,7 @@ touched.
 
 ```
 npm run bench:extract   # rebuild corpus.json from Canary trajectories
-npm run bench:gates     # Hardener's patch gates over 33 real patches
+npm run bench:gates     # Vultix's patch gates over 33 real patches
 npm run bench:semgrep   # what the scanners score with no AI at all
 ```
 
@@ -212,7 +212,7 @@ Holding measure until the GitHub App (§1.6), and the code says so.
 repo from that scan's `target_url`.
 
 So the moment 1.1 drops domain verification for git targets, any stranger who
-signs up can scan an arbitrary public repo, call `/api/pr`, and have Hardener
+signs up can scan an arbitrary public repo, call `/api/pr`, and have Vultix
 push a branch and open a pull request on that repo **from your GitHub account**.
 Rate limits cap the volume; they do not change whose name is on it.
 
@@ -238,11 +238,11 @@ first-contact failures around `--read-only` plus the tmpfs, and non-root plus
 git's identity. Verify on the box before trusting it:
 
 ```
-docker build -t hardener-scanner:latest worker/
+docker build -t vultix-scanner:latest worker/
 docker run --rm --user 10001:10001 --read-only --tmpfs=/tmp:rw,exec \
   -e TARGET_URL=https://github.com/owner/small-repo.git -e DRY_RUN=1 \
   -e HOME=/tmp -e GIT_CONFIG_GLOBAL=/dev/null \
-  hardener-scanner:latest node scan.mjs
+  vultix-scanner:latest node scan.mjs
 ```
 
 
@@ -303,7 +303,7 @@ The migration between stages is a URL and an env var, because `worker/server.mjs
 is identical on both. Do not spend more decision time on this than that fact
 warrants.
 
-**The non-negotiable if you use a VPS.** Hardener clones code it does not trust
+**The non-negotiable if you use a VPS.** Vultix clones code it does not trust
 and then *runs* it — `validate.mjs` executes tests an AI wrote, inside a
 stranger's repository. That is arbitrary code execution by design. On Render each
 scan sits in a disposable container. On a VPS, running scans directly on the host
@@ -411,7 +411,7 @@ and CodeQL all use, for reasons that matter here:
   database waiting to be breached — which, for a security product, is the
   difference between a bad day and an extinction event.
 - The user revokes it from GitHub's own settings without asking you.
-- PRs come from **Hardener**, not from you. That fixes 1.2 at the root rather
+- PRs come from **Vultix**, not from you. That fixes 1.2 at the root rather
   than patching around it.
 
 It also reuses a concept already in the product: **installation is the
@@ -475,7 +475,7 @@ Confirm Render's current limits directly. The figures above are from May 2026.
 ## Part 2 — The product that works without a key
 
 Every claim in this part is deterministic. None of it waits on Part 3, none of
-it can hallucinate, and it is the half of Hardener that can honestly say a
+it can hallucinate, and it is the half of Vultix that can honestly say a
 defect was repaired.
 
 ### 2.1 Stop paying a model to second-guess a database
@@ -537,7 +537,7 @@ Semgrep scored an F1 of 0.125 on those and no amount of pipeline work changes
 it. Say so on the page rather than letting a customer discover it.
 
 It also moves nearer Dependabot, Renovate and Snyk. The angle against them is
-narrow but true: they bump everything and let CI sort it out; Hardener bumps
+narrow but true: they bump everything and let CI sort it out; Vultix bumps
 only what carries a live advisory and hands back proof that the CVE is gone and
 nothing broke.
 
@@ -547,8 +547,8 @@ nothing broke.
 
 ### Why this is the experiment
 
-Hardener's verifier is a **filter** over scanner output. It can only ever remove
-findings, never add them — so Semgrep's recall is a hard ceiling on Hardener's
+Vultix's verifier is a **filter** over scanner output. It can only ever remove
+findings, never add them — so Semgrep's recall is a hard ceiling on Vultix's
 recall.
 
 Semgrep raised **zero** findings inside the vulnerable file for 13 of 15 CVE
@@ -568,7 +568,7 @@ worker does not have.
 
 Pure git ingestion through `tools/build_real_tasks.py`, no model calls. Add
 roughly 15 JavaScript and TypeScript CVE tasks — the corpus is entirely Python
-while Hardener's market is mostly JS — plus 8 more clean controls. An expert
+while Vultix's market is mostly JS — plus 8 more clean controls. An expert
 reviewer will raise statistical power against n=15, and this is the answer.
 
 > **Proof:** 40+ tasks with clean controls, every one reproducible from a git ref.

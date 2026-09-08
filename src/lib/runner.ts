@@ -73,7 +73,7 @@ async function dispatchService(scanId: string, targetUrl: string) {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'x-hardener-signature': `t=${ts},v1=${sig}`,
+                'x-vultix-signature': `t=${ts},v1=${sig}`,
             },
             body,
             signal: abort?.signal,
@@ -104,7 +104,7 @@ async function dispatchFly(scanId: string, targetUrl: string) {
         },
         body: JSON.stringify({
             config: {
-                image: process.env.FLY_SCANNER_IMAGE || 'registry.fly.io/hardener-scanner:latest',
+                image: process.env.FLY_SCANNER_IMAGE || 'registry.fly.io/vultix-scanner:latest',
                 // Only per-scan vars travel here. Static secrets (GEMINI_API_KEY,
                 // SUPABASE_URL, SUPABASE_SERVICE_KEY) are Fly app secrets the
                 // machine inherits, so the service-role key stays out of this body.

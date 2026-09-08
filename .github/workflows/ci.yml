@@ -39,4 +39,4 @@ jobs:
       # hit on a paid Fly deploy.
       - name: Build scanner image
         working-directory: worker
-        run: docker build -t hardener-scanner:ci .
+        run: docker build -t vultix-scanner:ci .

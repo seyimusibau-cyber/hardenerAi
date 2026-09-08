@@ -1,4 +1,4 @@
--- Hardener Plus Comprehensive Supabase Schema
+-- Vultix Comprehensive Supabase Schema
 -- This script contains all tables, views, functions, and RLS policies
 -- required for both the public app and the secure Admin Dashboard.
 

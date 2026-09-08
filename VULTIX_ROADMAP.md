@@ -1,4 +1,4 @@
-# Hardener — Build Roadmap & Status
+# Vultix — Build Roadmap & Status
 
 > **Historical build log.** For current status and the forward plan, see
 > [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md); where the two disagree,
@@ -19,7 +19,7 @@ roadmap closed that loop and built outward across all phases.
 
 ## Phase 0 — Close the loop (MVP)
 - ✅ Scanner worker (`worker/`): clone → Semgrep → per-finding AI verify → persist.
-- ✅ `Dockerfile` + `fly.toml` → `registry.fly.io/hardener-scanner:latest`.
+- ✅ `Dockerfile` + `fly.toml` → `registry.fly.io/vultix-scanner:latest`.
 - ✅ Worker → verifier → DB writeback (score, grade, headline diff/test).
 - ✅ Failure path: worker errors write `status='Failed'` + `error_message`.
 - 🟡 **Live verification** still required: `fly deploy` + secrets, then a real scan.
@@ -61,7 +61,7 @@ roadmap closed that loop and built outward across all phases.
 
 **Main app** (Vercel/host env): `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`,
 `QSTASH_TOKEN`, `QSTASH_CURRENT_SIGNING_KEY`, `QSTASH_NEXT_SIGNING_KEY`,
-`NEXT_PUBLIC_APP_URL`, `FLY_API_TOKEN`, `FLY_APP_NAME=hardener-scanner`,
+`NEXT_PUBLIC_APP_URL`, `FLY_API_TOKEN`, `FLY_APP_NAME=vultix-scanner`,
 `GITHUB_TOKEN` (PRs), `RESEND_API_KEY` + `ALERT_FROM_EMAIL` (email alerts),
 `NOTIFY_SECRET` (shared with worker).
 

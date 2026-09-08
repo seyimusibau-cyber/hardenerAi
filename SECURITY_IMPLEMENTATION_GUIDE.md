@@ -1,6 +1,6 @@
 # Security Implementation Guide
 
-This guide covers the security enhancements implemented and remaining tasks for the Hardener application.
+This guide covers the security enhancements implemented and remaining tasks for the Vultix application.
 
 ## ✅ Completed Security Implementations
 

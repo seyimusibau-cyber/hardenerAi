@@ -128,7 +128,7 @@ async function validateRedirectChain(url: string): Promise<{
                 redirect: 'manual',
                 signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
                 headers: {
-                    'User-Agent': 'HardenerPlus-Scanner/1.0'
+                    'User-Agent': 'Vultix-Scanner/1.0'
                 }
             });
             

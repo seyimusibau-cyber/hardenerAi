@@ -6,7 +6,7 @@ import { createClient } from '@/utils/supabase/server';
 // ============================================================================
 // 2FA Configuration
 // ============================================================================
-const APP_NAME = process.env.TWO_FACTOR_APP_NAME || 'Hardener+';
+const APP_NAME = process.env.TWO_FACTOR_APP_NAME || 'Vultix+';
 const BACKUP_CODES_COUNT = parseInt(process.env.TWO_FACTOR_BACKUP_CODES_COUNT || '10');
 
 // ============================================================================

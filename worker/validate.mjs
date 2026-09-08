@@ -48,9 +48,9 @@ function childEnv() {
 // How to run a generated test, per language. Anything absent here is not
 // runnable in this container.
 const RUNNERS = {
-  python:     { file: "test_hardener_fix.py",   cmd: "python", args: (f) => ["-m", "pytest", "-q", f] },
-  javascript: { file: "hardener.fix.test.mjs",  cmd: "node",   args: (f) => ["--test", f] },
-  typescript: { file: "hardener.fix.test.mjs",  cmd: "node",   args: (f) => ["--test", f] },
+  python:     { file: "test_vultix_fix.py",   cmd: "python", args: (f) => ["-m", "pytest", "-q", f] },
+  javascript: { file: "vultix.fix.test.mjs",  cmd: "node",   args: (f) => ["--test", f] },
+  typescript: { file: "vultix.fix.test.mjs",  cmd: "node",   args: (f) => ["--test", f] },
 };
 
 function writePatch(unifiedDiff) {

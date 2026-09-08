@@ -1,4 +1,4 @@
-// Hardener scanner worker — the missing spine.
+// Vultix scanner worker — the missing spine.
 // Flow: clone -> Semgrep -> (per finding) AI verify -> validate patch -> persist.
 // Runs as an ephemeral Fly.io machine; auto-destroyed after exit.
 import { createClient } from "@supabase/supabase-js";
@@ -39,7 +39,7 @@ let dryRows = [];
 
 // Fenced so it survives anything else the scanners printed to stdout. The host
 // splits on this marker rather than guessing which line is the payload.
-const RESULT_FENCE = "---HARDENER-RESULT---";
+const RESULT_FENCE = "---VULTIX-RESULT---";
 let emitted = false;
 function emitResult() {
   if (!DRY || emitted) return;
@@ -248,7 +248,7 @@ async function main() {
       try {
         await fetch(`${APP_URL}/api/webhooks/notify`, {
           method: "POST",
-          headers: { "Content-Type": "application/json", "x-hardener-secret": NOTIFY_SECRET },
+          headers: { "Content-Type": "application/json", "x-vultix-secret": NOTIFY_SECRET },
           body: JSON.stringify({ scanId: SCAN_ID }),
         });
       } catch (e) { console.error(`[notify] ${e?.message}`); }

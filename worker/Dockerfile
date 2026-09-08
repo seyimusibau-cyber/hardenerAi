@@ -1,4 +1,4 @@
-# Ephemeral scanner worker. Built + pushed to registry.fly.io/hardener-scanner:latest
+# Ephemeral scanner worker. Built + pushed to registry.fly.io/vultix-scanner:latest
 # (the image the qstash webhook already references).
 FROM node:20-slim
 
@@ -38,7 +38,7 @@ COPY *.mjs ./
 # inside a stranger's repository. So it runs as a fixed non-root uid, with a
 # read-only root filesystem and a tmpfs for /tmp supplied at `docker run` time
 # (see worker/server.mjs). Nothing here is writable at runtime.
-RUN useradd --uid 10001 --create-home --shell /usr/sbin/nologin hardener \
+RUN useradd --uid 10001 --create-home --shell /usr/sbin/nologin vultix \
     && chmod -R a+rX /app
 
 # git identity is NOT set here. A global config would live in root's home, which

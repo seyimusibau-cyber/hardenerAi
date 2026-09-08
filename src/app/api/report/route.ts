@@ -33,7 +33,7 @@ export async function GET(request: Request) {
         </div>`).join('');
 
     const html = `<!doctype html><html><head><meta charset="utf-8">
-      <title>Hardener report — ${esc(scan.target_url)}</title>
+      <title>Vultix report — ${esc(scan.target_url)}</title>
       <style>
         body{font-family:ui-sans-serif,system-ui,sans-serif;max-width:900px;margin:2rem auto;padding:0 1rem;color:#0f172a}
         h1{font-size:1.4rem} .grade{font-size:3rem;font-weight:800}

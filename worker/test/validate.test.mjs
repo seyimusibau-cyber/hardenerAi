@@ -39,7 +39,7 @@ function git(args, cwd) {
 
 /** A repo sitting at the buggy commit, plus a valid diff from buggy -> fixed. */
 function makeRepo() {
-  const dir = mkdtempSync(join(tmpdir(), "hardener-validate-"));
+  const dir = mkdtempSync(join(tmpdir(), "vultix-validate-"));
   git(["init", "-q", "."], dir);
   git(["config", "user.name", "T"], dir);
   git(["config", "user.email", "t@e.com"], dir);

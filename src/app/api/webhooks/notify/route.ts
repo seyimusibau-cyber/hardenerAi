@@ -13,7 +13,7 @@ const supabaseAdmin = createClient(
 // that matches this scan's target.
 export async function POST(req: Request) {
     try {
-        if (req.headers.get('x-hardener-secret') !== process.env.NOTIFY_SECRET) {
+        if (req.headers.get('x-vultix-secret') !== process.env.NOTIFY_SECRET) {
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
         const { scanId } = await req.json();
@@ -30,7 +30,7 @@ export async function POST(req: Request) {
         let sent = 0;
         for (const s of schedules ?? []) {
             if (s.notify_slack_webhook && await sendSlack(s.notify_slack_webhook, text)) sent++;
-            if (s.notify_email && await sendEmail(s.notify_email, `Hardener scan: ${scan.target_url}`, `<pre>${text}</pre>`)) sent++;
+            if (s.notify_email && await sendEmail(s.notify_email, `Vultix scan: ${scan.target_url}`, `<pre>${text}</pre>`)) sent++;
         }
         return NextResponse.json({ success: true, sent });
     } catch (err) {

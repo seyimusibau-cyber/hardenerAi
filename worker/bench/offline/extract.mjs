@@ -4,7 +4,7 @@
 // CVEs, and it recorded every answer. Those recordings contain something this
 // project has never had: real, model-generated unified diffs against real
 // vulnerable code, with a graded outcome attached. That is a permanent, free,
-// repeatable test set for Hardener's patch gates -- no API key, no spend, and
+// repeatable test set for Vultix's patch gates -- no API key, no spend, and
 // it cannot drift, because the model's answer is already written down.
 //
 // Usage: node worker/bench/offline/extract.mjs [canaryDir]
@@ -64,7 +64,7 @@ for (const dir of readdirSync(join(canaryDir, "trajectories"))) {
         test_cmd: task.test_cmd,
         fix_touched_lines: task.fix_touched_lines,
       },
-      // What Canary observed when IT graded this same patch. Hardener's gates
+      // What Canary observed when IT graded this same patch. Vultix's gates
       // are run against the same input, so any disagreement is a real,
       // attributable difference between the two appliers -- not noise.
       canary: {

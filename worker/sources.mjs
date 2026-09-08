@@ -21,7 +21,7 @@ export function cloneRepo(target) {
   if (url.startsWith("git@")) url = url.replace("git@github.com:", "https://github.com/");
   if (!/^https?:\/\//.test(url)) url = "https://" + url;
   if (!url.endsWith(".git") && /github\.com/.test(url)) url += ".git";
-  const dir = mkdtempSync(join(tmpdir(), "hardener-repo-"));
+  const dir = mkdtempSync(join(tmpdir(), "vultix-repo-"));
   run("git", ["clone", "--depth", "1", url, dir]);
   return dir;
 }
@@ -45,7 +45,7 @@ export function detectLanguage(repoDir) {
 
 // Run Semgrep and return the parsed SARIF runs[0].results array.
 export function runSemgrep(repoDir) {
-  const out = join(mkdtempSync(join(tmpdir(), "hardener-sarif-")), "out.sarif");
+  const out = join(mkdtempSync(join(tmpdir(), "vultix-sarif-")), "out.sarif");
   try {
     run("semgrep", ["scan", "--config", "auto", "--sarif", "--output", out, "--quiet", "--timeout", "0", repoDir],
         { cwd: repoDir, timeout: 600_000, env: { ...process.env, SEMGREP_SEND_METRICS: "off" } });
@@ -77,7 +77,7 @@ export function extractSnippet(repoDir, result, ctx = 15) {
 // Gitleaks — secret detection. Emits SARIF; we normalize it into the same
 // shape as Semgrep results so the rest of the pipeline is source-agnostic.
 export function runGitleaks(repoDir) {
-  const out = join(mkdtempSync(join(tmpdir(), "hardener-gl-")), "gl.sarif");
+  const out = join(mkdtempSync(join(tmpdir(), "vultix-gl-")), "gl.sarif");
   try {
     run("gitleaks", ["detect", "--source", repoDir, "--report-format", "sarif",
                      "--report-path", out, "--no-banner", "--exit-code", "0"],
@@ -95,7 +95,7 @@ export function runGitleaks(repoDir) {
 // osv-scanner — dependency/SCA vulnerabilities from lockfiles. SARIF out,
 // normalized into the shared result shape.
 export function runOsvScanner(repoDir) {
-  const out = join(mkdtempSync(join(tmpdir(), "hardener-osv-")), "osv.sarif");
+  const out = join(mkdtempSync(join(tmpdir(), "vultix-osv-")), "osv.sarif");
   try {
     run("osv-scanner", ["scan", "--format", "sarif", "--output", out, "-r", repoDir],
         { cwd: repoDir, timeout: 300_000 });
@@ -113,7 +113,7 @@ export function runOsvScanner(repoDir) {
 // image. Returns results in the shared shape. Kept behind classifyTarget so it
 // only runs for "web" targets. A full crawler + ZAP active scan is future work.
 export function runNuclei(targetUrl) {
-  const out = join(mkdtempSync(join(tmpdir(), "hardener-dast-")), "nuclei.sarif");
+  const out = join(mkdtempSync(join(tmpdir(), "vultix-dast-")), "nuclei.sarif");
   try {
     run("nuclei", ["-u", targetUrl, "-silent", "-sarif-export", out, "-timeout", "10"],
         { timeout: 600_000 });

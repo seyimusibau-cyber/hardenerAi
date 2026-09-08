@@ -17,7 +17,7 @@ import { parseDiffPath, applyUnifiedDiff } from '@/lib/apply-diff';
 // the repository from that scan's target. Before the git/web split in
 // `/api/scan`, no user could scan a repository at all, so this was unreachable.
 // The moment repository scans work, an unrestricted version of this route lets
-// any signed-up stranger scan any public repository and have Hardener push a
+// any signed-up stranger scan any public repository and have Vultix push a
 // branch and open a pull request on it FROM THE OPERATOR'S ACCOUNT. Rate limits
 // bound the volume; they do not change whose name is on the commit.
 //
@@ -27,7 +27,7 @@ import { parseDiffPath, applyUnifiedDiff } from '@/lib/apply-diff';
 //
 // This is a holding measure, not the design. The real fix is the GitHub App
 // (IMPLEMENTATION_PLAN.md §1.6): the user installs it on their own repositories,
-// the token is theirs and expires hourly, and pull requests come from Hardener
+// the token is theirs and expires hourly, and pull requests come from Vultix
 // rather than from the operator. When that lands, this allow-list is replaced by
 // "does this user have an installation covering this repository".
 function prAllowList(): string[] {
@@ -85,7 +85,7 @@ export async function POST(request: Request) {
         }
         if (!allowed.includes(`${repo.owner}/${repo.repo}`.toLowerCase())) {
             return NextResponse.json({
-                error: 'Hardener cannot open a pull request on this repository. '
+                error: 'Vultix cannot open a pull request on this repository. '
                      + 'Download the patch and apply it yourself, or connect the repository once GitHub App support ships.',
             }, { status: 403 });
         }
@@ -95,11 +95,11 @@ export async function POST(request: Request) {
         const base = repoInfo.default_branch;
         const ref = await gh(`/repos/${repo.owner}/${repo.repo}/git/ref/heads/${base}`, token);
         const baseSha = ref.object.sha;
-        const branch = `hardener/fix-${String(findingId).slice(0, 8)}`;
+        const branch = `vultix/fix-${String(findingId).slice(0, 8)}`;
 
         const filePath = parseDiffPath(diff);
         let applied = false;
-        let prBody = `Automated remediation from **Hardener AI**.\n\n${finding.reasoning || ''}\n`;
+        let prBody = `Automated remediation from **Vultix**.\n\n${finding.reasoning || ''}\n`;
 
         // Create the branch
         await gh(`/repos/${repo.owner}/${repo.repo}/git/refs`, token, {
@@ -115,7 +115,7 @@ export async function POST(request: Request) {
                     await gh(`/repos/${repo.owner}/${repo.repo}/contents/${encodeURIComponent(filePath)}`, token, {
                         method: 'PUT',
                         body: JSON.stringify({
-                            message: `fix: ${finding.rule_id || 'security finding'} (Hardener AI)`,
+                            message: `fix: ${finding.rule_id || 'security finding'} (Vultix)`,
                             content: Buffer.from(patched, 'utf8').toString('base64'),
                             sha: fileRes.sha, branch,
                         }),
@@ -130,11 +130,11 @@ export async function POST(request: Request) {
         if (!applied) {
             prBody += `\n> ⚠️ Could not auto-apply the patch. Apply this diff manually:\n\n\`\`\`diff\n${diff}\n\`\`\``;
             // Ensure the branch differs from base so a PR can open: drop a note file.
-            await gh(`/repos/${repo.owner}/${repo.repo}/contents/HARDENER_FIX_${String(findingId).slice(0, 8)}.md`, token, {
+            await gh(`/repos/${repo.owner}/${repo.repo}/contents/VULTIX_FIX_${String(findingId).slice(0, 8)}.md`, token, {
                 method: 'PUT',
                 body: JSON.stringify({
-                    message: `chore: Hardener remediation note for ${finding.rule_id}`,
-                    content: Buffer.from(`# Hardener remediation\n\n\`\`\`diff\n${diff}\n\`\`\`\n`, 'utf8').toString('base64'),
+                    message: `chore: Vultix remediation note for ${finding.rule_id}`,
+                    content: Buffer.from(`# Vultix remediation\n\n\`\`\`diff\n${diff}\n\`\`\`\n`, 'utf8').toString('base64'),
                     branch,
                 }),
             }).catch(() => {});
@@ -143,7 +143,7 @@ export async function POST(request: Request) {
         const pr = await gh(`/repos/${repo.owner}/${repo.repo}/pulls`, token, {
             method: 'POST',
             body: JSON.stringify({
-                title: `[Hardener] Fix ${finding.rule_id || 'security finding'}`,
+                title: `[Vultix] Fix ${finding.rule_id || 'security finding'}`,
                 head: branch, base, body: prBody,
             }),
         });

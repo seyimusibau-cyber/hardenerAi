@@ -61,8 +61,8 @@ jobs:
       # an identity configured.
       - name: Configure git identity for patch validation
         run: |
-          git config --global user.email "worker@hardener.ai"
-          git config --global user.name "Hardener Worker"
+          git config --global user.email "worker@vultix.co.uk"
+          git config --global user.name "Vultix Worker"
           git config --global init.defaultBranch main
 
       - name: Run scan

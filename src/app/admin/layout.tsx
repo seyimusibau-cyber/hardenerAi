@@ -20,7 +20,7 @@ export default function AdminLayout({
                             </svg>
                         </div>
                         <span className="font-bold tracking-tight text-white">
-                            Hardener<span className="text-emerald-500">Admin</span>
+                            Vultix<span className="text-emerald-500">Admin</span>
                         </span>
                     </div>
                 </div>
