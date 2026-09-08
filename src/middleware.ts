@@ -8,10 +8,21 @@ export async function middleware(request: NextRequest) {
     const response = await updateSession(request)
     
     // Skip CSRF and session checks for public/auth-handled routes
-    const publicRoutes = ['/login', '/signup', '/', '/pricing', '/docs', '/api/scan', '/api/verify-domain']
+    const publicRoutes = [
+        '/',
+        '/login',
+        '/signup',
+        '/forgot-password',
+        '/reset-password',
+        '/pricing',
+        '/docs',
+        '/api/scan',
+        '/api/verify-domain'
+    ]
     const isPublicRoute = publicRoutes.some(route => 
         request.nextUrl.pathname === route || 
         request.nextUrl.pathname.startsWith('/_next') ||
+        request.nextUrl.pathname.startsWith('/auth') ||
         request.nextUrl.pathname.startsWith('/api/auth')
     )
     

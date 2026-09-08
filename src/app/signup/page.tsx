@@ -14,6 +14,7 @@ export default function SignupPage() {
     const [acceptTos, setAcceptTos] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
+    const [emailSent, setEmailSent] = useState(false);
     const router = useRouter();
     const supabase = createClient();
 
@@ -21,22 +22,14 @@ export default function SignupPage() {
         e.preventDefault();
         setError(null);
 
-        const freeEmailProviders = ['gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'protonmail.com', 'mail.com'];
-        const domain = email.split('@')[1]?.toLowerCase();
-        
-        if (freeEmailProviders.includes(domain)) {
-            setError("Please use a corporate email address. Free providers are restricted for security scanning.");
-            return;
-        }
-
         if (!acceptTos) {
             setError("You must accept the Terms of Service, Acceptable Use Policy, and Indemnification Agreement.");
             return;
         }
 
-        // Password complexity validation
-        if (password.length < 12) {
-            setError("Password must be at least 12 characters long.");
+        // Password complexity validation (minimum 8 characters with standard security criteria)
+        if (password.length < 8) {
+            setError("Password must be at least 8 characters long.");
             return;
         }
         if (!/[A-Z]/.test(password)) {
@@ -47,18 +40,14 @@ export default function SignupPage() {
             setError("Password must contain at least one lowercase letter.");
             return;
         }
-        if (!/[0-9]/.test(password)) {
-            setError("Password must contain at least one number.");
-            return;
-        }
-        if (!/[^A-Za-z0-9]/.test(password)) {
-            setError("Password must contain at least one special character.");
+        if (!/[\d!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(password)) {
+            setError("Password must contain at least one number or special character.");
             return;
         }
 
         setIsLoading(true);
 
-        const { data, error: signUpError } = await supabase.auth.signUp({
+        const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
             email,
             password,
             options: {
@@ -66,13 +55,19 @@ export default function SignupPage() {
                     full_name: name,
                     tos_accepted_at: new Date().toISOString()
                 },
-                // Replace this with your actual production URL later
-                emailRedirectTo: `${location.origin}/auth/callback`,
+                emailRedirectTo: `${location.origin}/auth/callback?next=/dashboard`,
             },
         });
 
         if (signUpError) {
             setError(signUpError.message);
+            setIsLoading(false);
+            return;
+        }
+
+        // If email confirmation is enabled, user is created but session is null until confirmed
+        if (signUpData?.user && !signUpData?.session) {
+            setEmailSent(true);
             setIsLoading(false);
             return;
         }
@@ -114,10 +109,42 @@ export default function SignupPage() {
                                 Vult<span className="text-emerald-500">ix</span>
                             </span>
                         </Link>
-                        <h1 className="text-2xl font-bold text-white mb-2">Create an Account</h1>
-                        <p className="text-slate-400 text-sm">Join the leading platform for modern app hardening.</p>
+                        <h1 className="text-2xl font-bold text-white mb-2">
+                            {emailSent ? "Check Your Inbox" : "Create an Account"}
+                        </h1>
+                        <p className="text-slate-400 text-sm">
+                            {emailSent
+                                ? "We've dispatched an account verification link to your email address."
+                                : "Join the leading platform for modern app hardening."}
+                        </p>
                     </div>
 
+                    {emailSent ? (
+                        <div className="space-y-6">
+                            <div className="p-4 bg-emerald-950/30 border border-emerald-500/30 rounded-xl">
+                                <div className="flex items-center gap-3 mb-2">
+                                    <div className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400">
+                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                        </svg>
+                                    </div>
+                                    <div className="text-sm font-bold text-white">
+                                        Verification sent to <span className="text-emerald-400">{email}</span>
+                                    </div>
+                                </div>
+                                <p className="text-xs text-slate-400 leading-relaxed pt-2 border-t border-emerald-500/20">
+                                    Click the link inside the confirmation email to activate your account and access your dashboard.
+                                </p>
+                            </div>
+
+                            <Link
+                                href="/login"
+                                className="w-full block text-center bg-slate-800 hover:bg-slate-700 text-white font-bold py-3 rounded-lg transition-all"
+                            >
+                                Back to Sign In
+                            </Link>
+                        </div>
+                    ) : (
                     <form onSubmit={handleSignup} className="space-y-4">
                         {error && (
                             <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-sm text-red-500">
@@ -149,7 +176,7 @@ export default function SignupPage() {
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
                                 className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all placeholder:text-slate-600"
-                                placeholder="name@company.com"
+                                placeholder="name@example.com"
                                 required
                             />
                         </div>
@@ -166,9 +193,9 @@ export default function SignupPage() {
                                 className="w-full bg-slate-950 border border-slate-800 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all placeholder:text-slate-600"
                                 placeholder="••••••••"
                                 required
-                                minLength={12}
+                                minLength={8}
                             />
-                            <p className="text-[10px] text-slate-500 pl-1 mt-1">Must be at least 12 characters with an uppercase letter, number, and special character.</p>
+                            <p className="text-[10px] text-slate-500 pl-1 mt-1">Must be at least 8 characters with uppercase, lowercase, and a number or symbol.</p>
                         </div>
 
                         <div className="flex items-start space-x-2 mt-4">
@@ -192,6 +219,7 @@ export default function SignupPage() {
                             {isLoading ? "Creating Account..." : "Sign Up"}
                         </button>
                     </form>
+                    )}
 
                     <div className="mt-8 text-center border-t border-slate-800/50 pt-6">
                         <p className="text-sm text-slate-400">

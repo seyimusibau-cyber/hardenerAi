@@ -400,6 +400,12 @@ export default function DocsPage() {
                                     {h.shortName} <span className="text-[10px] text-slate-550 block font-normal">{h.name.split(" ")[0]}</span>
                                 </a>
                             ))}
+                            <a
+                                href="#email-deliverability"
+                                className="block px-3 py-2 text-sm text-emerald-400 hover:text-white hover:bg-emerald-950/30 rounded-lg transition-colors font-medium border border-emerald-500/20 mt-2"
+                            >
+                                Email &amp; DNS <span className="text-[10px] text-emerald-500/70 block font-normal">SPF / DKIM / DMARC</span>
+                            </a>
                         </nav>
                     </div>
 
@@ -501,6 +507,80 @@ export default function DocsPage() {
                             </section>
                         ))}
                     </div>
+
+                    {/* Email Security & Deliverability Architecture */}
+                    <section
+                        id="email-deliverability"
+                        className="scroll-mt-24 bg-slate-900/40 border border-slate-800 rounded-2xl p-6 sm:p-8 space-y-6 animate-in fade-in duration-500"
+                    >
+                        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                            <div>
+                                <span className="text-[9px] font-mono font-bold uppercase tracking-widest px-2 py-0.5 rounded border bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
+                                    Deliverability Architecture
+                                </span>
+                                <h2 className="text-xl font-bold text-white mt-2.5 font-mono">Transactional Email &amp; DNS Deliverability</h2>
+                                <p className="text-sm font-semibold text-emerald-400 mt-1 font-sans">
+                                    Configuring SPF, DKIM, DMARC, and Resend SMTP for 99%+ inbox placement.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="space-y-4 border-t border-slate-800/50 pt-5 text-sm text-slate-400 leading-relaxed font-sans">
+                            <p>
+                                Supabase default auth emails use a shared mailing pool limited to 3-4 emails per hour and are routinely classified as spam by Gmail and Outlook. Vultix employs a hybrid delivery architecture using direct Resend API dispatch with cryptographic tokens, completely bypassing rate limits.
+                            </p>
+
+                            <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider font-mono pt-2">
+                                Recommended DNS Records for Sending Domains
+                            </h4>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-xs font-mono border border-slate-800 rounded-lg overflow-hidden">
+                                    <thead className="bg-slate-950 text-slate-400 border-b border-slate-800">
+                                        <tr>
+                                            <th className="py-2.5 px-3 text-left">Record Type</th>
+                                            <th className="py-2.5 px-3 text-left">Host / Name</th>
+                                            <th className="py-2.5 px-3 text-left">Value / Target</th>
+                                            <th className="py-2.5 px-3 text-left">Purpose</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-850">
+                                        <tr className="bg-slate-900/30">
+                                            <td className="py-2 px-3 text-emerald-400 font-bold">TXT</td>
+                                            <td className="py-2 px-3 text-slate-300">@</td>
+                                            <td className="py-2 px-3 text-slate-200">v=spf1 include:resend.com ~all</td>
+                                            <td className="py-2 px-3 text-slate-400">Sender Policy Framework (SPF)</td>
+                                        </tr>
+                                        <tr className="bg-slate-900/10">
+                                            <td className="py-2 px-3 text-emerald-400 font-bold">CNAME</td>
+                                            <td className="py-2 px-3 text-slate-300">resend._domainkey</td>
+                                            <td className="py-2 px-3 text-slate-200">dkim.resend.com</td>
+                                            <td className="py-2 px-3 text-slate-400">Cryptographic DKIM Signing</td>
+                                        </tr>
+                                        <tr className="bg-slate-900/30">
+                                            <td className="py-2 px-3 text-emerald-400 font-bold">TXT</td>
+                                            <td className="py-2 px-3 text-slate-300">_dmarc</td>
+                                            <td className="py-2 px-3 text-slate-200">v=DMARC1; p=quarantine; pct=100;</td>
+                                            <td className="py-2 px-3 text-slate-400">Anti-Spoofing DMARC Policy</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider font-mono pt-3">
+                                Supabase Custom SMTP Configuration (Optional)
+                            </h4>
+                            <p className="text-xs text-slate-400">
+                                If you also want Supabase native auth confirmations to use Resend, enter these in <strong>Supabase Dashboard &rarr; Project Settings &rarr; Authentication &rarr; SMTP Settings</strong>:
+                            </p>
+                            <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 font-mono text-xs text-slate-300 space-y-1">
+                                <div><span className="text-emerald-400">Host:</span> smtp.resend.com</div>
+                                <div><span className="text-emerald-400">Port:</span> 465 (SSL) or 587 (TLS)</div>
+                                <div><span className="text-emerald-400">User:</span> resend</div>
+                                <div><span className="text-emerald-400">Password:</span> &lt;YOUR_RESEND_API_KEY&gt;</div>
+                                <div><span className="text-emerald-400">Sender Email:</span> security@vultix.co.uk</div>
+                            </div>
+                        </div>
+                    </section>
                 </main>
             </div>
         </div>
