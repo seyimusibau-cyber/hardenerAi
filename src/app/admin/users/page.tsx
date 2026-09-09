@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from "react";
 import { createClient } from "@/utils/supabase/client";
+import { csrfFetch } from '@/lib/csrf-client';
 
 interface UserProfile {
     id: string;
@@ -52,7 +53,7 @@ export default function AdminUsersList() {
     // their own role to 'admin'. /api/admin/users re-checks admin status on the
     // server and writes with the service role.
     async function patchUser(userId: string, field: 'plan' | 'status' | 'role', value: string) {
-        const res = await fetch('/api/admin/users', {
+        const res = await csrfFetch('/api/admin/users', {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ userId, field, value }),

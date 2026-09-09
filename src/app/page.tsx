@@ -220,15 +220,17 @@ export default function Home() {
             });
         }, 300);
 
+        // What the public check actually does. It reads the target's response
+        // headers — it does not clone anything or read any code. The list used
+        // to claim "Indexing AST syntax trees", which described the signed-in
+        // repository scan, not this.
         const statuses = [
-            "Resolving hostname and verification checks...",
-            "Applying SSRF protection filters...",
-            "Initiating secure handshake...",
-            "Reading response headers...",
-            "Analyzing Content-Security-Policy rules...",
-            "Evaluating TLS & Strict-Transport-Security...",
-            "Checking clickjacking guards...",
-            "Compiling safety score..."
+            "Resolving hostname...",
+            "Fetching response headers...",
+            "Checking Content-Security-Policy...",
+            "Checking Strict-Transport-Security...",
+            "Checking X-Frame-Options and X-Content-Type-Options...",
+            "Grading the results...",
         ];
 
         let statusIndex = 0;
@@ -266,29 +268,15 @@ export default function Home() {
         } catch (err) {
             clearInterval(progressInterval);
             clearInterval(statusInterval);
-            const msg = err instanceof Error ? err.message : "Failed to establish connection to target server.";
+            const msg = err instanceof Error ? err.message : "Failed to reach that host.";
             setScanError(msg);
             setIsScanning(false);
 
-            // Log failed scan to database
-            if (isLoggedIn) {
-                try {
-                    const supabase = createClient();
-                    const { data: { user } } = await supabase.auth.getUser();
-                    if (user) {
-                        await supabase.from("scans").insert({
-                            user_id: user.id,
-                            target_url: trimmed,
-                            status: "Failed",
-                            progress: 100,
-                            vulns_found: 0,
-                            error_message: msg
-                        });
-                    }
-                } catch {
-                    // silent database log failure
-                }
-            }
+            // Nothing is written to `scans` from here. This is the public
+            // header check, not a scan: a visitor is not signed in, no quota
+            // applies, and a row in the scan history would misrepresent what
+            // ran. Real scans are queued by POST /api/scan from the dashboard
+            // and their rows are written server-side.
         }
     };
 

@@ -6,6 +6,7 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
+import { csrfFetch } from "@/lib/csrf-client";
 
 interface ScanCheck {
     name: string;
@@ -177,7 +178,7 @@ export default function UserDashboard() {
         setDnsStatusMessage(null);
 
         try {
-            const res = await fetch("/api/verify-domain", {
+            const res = await csrfFetch("/api/verify-domain", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ action: "generate", domain: domainToVerify }),
@@ -199,7 +200,7 @@ export default function UserDashboard() {
         setDnsStatusMessage(null);
 
         try {
-            const res = await fetch("/api/verify-domain", {
+            const res = await csrfFetch("/api/verify-domain", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ action: "verify", domain: verifyingDomain }),
@@ -265,127 +266,106 @@ export default function UserDashboard() {
         }
     };
 
+    // Queue a real scan and follow it.
+    //
+    // This used to call GET /api/scan?url=, which is an HTTP HEADER AUDIT — it
+    // fetched the target and graded its response headers. Pasting a GitHub URL
+    // therefore graded github.com's headers and never cloned anything. The
+    // handler then wrote a "Completed" row into `scans` itself, which skipped
+    // classifyTarget, the domain verification gate, the quota, the concurrency
+    // cap and the QStash dispatch — so the scanner was never asked to run.
+    //
+    // POST /api/scan is the real pipeline. It returns 202 and a scanId; the row
+    // is written server-side and progresses Queued -> Running -> Completed. We
+    // follow that row rather than inventing progress.
     const handleScan = async (e: React.FormEvent) => {
         e.preventDefault();
         const trimmed = url.trim();
         if (!trimmed) return;
 
         setIsScanning(true);
-        setScanProgress(5);
-        setScanStatus("Resolving hostname...");
+        setScanProgress(0);
+        setScanStatus("Queueing scan...");
         setScanError(null);
         setScanResult(null);
 
-        const progressInterval = setInterval(() => {
-            setScanProgress((prev) => {
-                if (prev >= 85) return prev;
-                return prev + Math.floor(Math.random() * 8) + 2;
-            });
-        }, 300);
-
-        const statuses = [
-            "Resolving domain and connecting to GitHub repository tree...",
-            "Indexing AST syntax trees for .ts, .py, .go, and .js source files...",
-            "Searching codebase for hardcoded API keys & environment secrets...",
-            "Checking HTTP security headers and SSL diagnostics...",
-            "Running static security analysis against logic bypasses...",
-            "Analyzing Content-Security-Policy rules...",
-            "Evaluating Strict-Transport-Security...",
-            "Compiling codebase safety score..."
-        ];
-
-        let statusIndex = 0;
-        const statusInterval = setInterval(() => {
-            if (statusIndex < statuses.length - 1) {
-                statusIndex++;
-                setScanStatus(statuses[statusIndex]);
-            }
-        }, 700);
+        let poll: ReturnType<typeof setInterval> | undefined;
 
         try {
-            const res = await fetch(`/api/scan?url=${encodeURIComponent(trimmed)}`);
+            const res = await csrfFetch("/api/scan", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ targetUrl: trimmed }),
+            });
             const data = await res.json();
 
-            clearInterval(progressInterval);
-            clearInterval(statusInterval);
-
             if (!res.ok) {
-                throw new Error(data.error || "An unexpected error occurred during the security scan.");
+                // The route's messages are specific and worth showing verbatim:
+                // "Domain not verified...", "Monthly scan limit reached...",
+                // "Only GitHub repositories are supported...".
+                throw new Error(data.error || "The scan could not be started.");
             }
 
-            setScanProgress(100);
+            const scanId: string | undefined = data.scanId;
+            if (!scanId) throw new Error("The scan was queued but returned no id.");
 
-            // Log successfully completed scan to database & refresh feed
-            const { data: { user } } = await supabase.auth.getUser();
-            if (user) {
-                const failedCount = data.checks.filter((c: ScanCheck) => c.status === "Failed").length;
-                const { data: insertData, error: dbErr } = await supabase
-                    .from("scans")
-                    .insert({
-                        user_id: user.id,
-                        target_url: trimmed,
-                        status: "Completed",
-                        progress: 100,
-                        vulns_found: failedCount,
-                        time_taken: "2.5s",
-                        score: data.score,
-                        grade: data.grade,
-                        checks: data.checks
-                    })
-                    .select()
-                    .single();
+            setScanStatus(
+                trimmed.includes("github.com")
+                    ? "Cloning repository, then Semgrep, Gitleaks and osv-scanner..."
+                    : "Probing the live host...",
+            );
 
-                if (!dbErr && insertData) {
-                    setScans((prev) => [insertData as ScanRecord, ...prev]);
+            // Follow the row the server owns. A real scan outruns a serverless
+            // timeout, so this is minutes, not seconds.
+            const started = Date.now();
+            const TIMEOUT_MS = 10 * 60 * 1000;
 
-                    // The quota is incremented server-side by POST /api/scan
-                    // under the service role. Migration 005 revoked the
-                    // browser's UPDATE grant on this column, so writing it from
-                    // here now fails — and should: a counter the client can
-                    // rewrite is not a limit. Reflect the new value locally so
-                    // the meter moves; the server holds the truth.
-                    setProfile((prev) =>
-                        prev ? { ...prev, monthly_scans_used: (prev.monthly_scans_used || 0) + 1 } : null,
-                    );
-                }
-            }
-
-            setTimeout(() => {
-                setScanResult(data);
-                setIsScanning(false);
-            }, 500);
-
-        } catch (err) {
-            clearInterval(progressInterval);
-            clearInterval(statusInterval);
-            const msg = err instanceof Error ? err.message : "Failed to establish connection to target server.";
-            setScanError(msg);
-            setIsScanning(false);
-
-            // Log failed scan to database & refresh feed
-            try {
-                const { data: { user } } = await supabase.auth.getUser();
-                if (user) {
-                    const { data: insertData, error: dbErr } = await supabase
+            await new Promise<void>((resolve, reject) => {
+                poll = setInterval(async () => {
+                    const { data: row } = await supabase
                         .from("scans")
-                        .insert({
-                            user_id: user.id,
-                            target_url: trimmed,
-                            status: "Failed",
-                            progress: 100,
-                            vulns_found: 0,
-                            error_message: msg
-                        })
-                        .select()
+                        .select("*")
+                        .eq("id", scanId)
                         .single();
 
-                    if (!dbErr && insertData) {
-                        setScans((prev) => [insertData as ScanRecord, ...prev]);
+                    if (row) {
+                        setScanProgress(row.progress ?? 0);
+                        setScans((prev) => {
+                            const rest = prev.filter((s) => s.id !== row.id);
+                            return [row as ScanRecord, ...rest];
+                        });
+
+                        if (row.status === "Completed") {
+                            setScanStatus("Complete");
+                            setScanProgress(100);
+                            setSelectedHistoryScan(row as ScanRecord);
+                            return resolve();
+                        }
+                        if (row.status === "Failed") {
+                            // A scan that cannot run is a failed scan and says
+                            // why — see the header of src/lib/runner.ts.
+                            return reject(new Error(row.error_message || "The scan failed."));
+                        }
+                        if (row.status === "Running") setScanStatus("Scanning...");
                     }
-                }
-            } catch {
-                // silent database insert failure
-            }
+
+                    if (Date.now() - started > TIMEOUT_MS) {
+                        reject(new Error("The scan is taking longer than expected. It is still running — check your history in a few minutes."));
+                    }
+                }, 3000);
+            });
+
+            // The quota is incremented server-side; mirror it locally so the
+            // meter moves without a refresh.
+            setProfile((prev) =>
+                prev ? { ...prev, monthly_scans_used: (prev.monthly_scans_used || 0) + 1 } : null,
+            );
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : "The scan could not be started.";
+            setScanError(msg);
+        } finally {
+            if (poll) clearInterval(poll);
+            setIsScanning(false);
         }
     };
 
@@ -946,6 +926,19 @@ interface FindingRow {
     patch_validated: boolean;
 }
 
+// How far up the ladder a finding climbed. This is the order that matters to
+// someone deciding what to do next: a PROVEN medium is a button, an unverified
+// critical is homework. Severity alone puts the homework first.
+function rung(f: FindingRow): number {
+    if (!f.is_vulnerability) return 0;      // rejected by the AI
+    if (f.patch_validated) return 4;        // test failed before, passed after
+    if (f.patch_applies) return 3;          // applies, but unproven
+    if (f.unified_diff) return 2;           // a patch exists
+    return 1;                               // confirmed, no patch
+}
+
+const SEVERITY_ORDER: Record<string, number> = { error: 3, warning: 2, note: 1 };
+
 function FindingsPanel({ scanId }: { scanId: string }) {
     const [findings, setFindings] = useState<FindingRow[] | null>(null);
     const [summary, setSummary] = useState<{ confirmed: number; false_positives: number; patches_validated: number } | null>(null);
@@ -958,7 +951,16 @@ function FindingsPanel({ scanId }: { scanId: string }) {
                 const res = await fetch(`/api/findings?scanId=${encodeURIComponent(scanId)}`);
                 const data = await res.json();
                 if (!res.ok) throw new Error(data.error || "Failed to load findings");
-                if (alive) { setFindings(data.findings); setSummary(data.summary); }
+                if (alive) {
+                    // Rung first, then severity within a rung.
+                    const ordered = [...(data.findings as FindingRow[])].sort(
+                        (a, b) => rung(b) - rung(a)
+                            || (SEVERITY_ORDER[(b.severity || "note").toLowerCase()] ?? 0)
+                             - (SEVERITY_ORDER[(a.severity || "note").toLowerCase()] ?? 0),
+                    );
+                    setFindings(ordered);
+                    setSummary(data.summary);
+                }
             } catch (e) {
                 if (alive) setError(e instanceof Error ? e.message : String(e));
             }
@@ -993,6 +995,35 @@ function FindingsPanel({ scanId }: { scanId: string }) {
 
 function FindingCard({ f }: { f: FindingRow }) {
     const [open, setOpen] = useState(false);
+    const [prState, setPrState] = useState<"idle" | "opening" | "done" | "error">("idle");
+    const [prUrl, setPrUrl] = useState<string | null>(null);
+    const [prError, setPrError] = useState<string | null>(null);
+
+    async function openPullRequest() {
+        setPrState("opening");
+        setPrError(null);
+        try {
+            const res = await csrfFetch("/api/pr", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ findingId: f.id }),
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                // 501 means the deployment has no allowlist configured. That is
+                // a setup step, not a failure of this finding, and the message
+                // has to say so or it reads as "the patch is bad".
+                setPrError(data.error || "Could not open the pull request.");
+                setPrState("error");
+                return;
+            }
+            setPrUrl(data.pr_url || data.url || null);
+            setPrState("done");
+        } catch {
+            setPrError("Could not reach the server.");
+            setPrState("error");
+        }
+    }
     const sev = (f.severity || "note").toLowerCase();
     const sevColor = sev === "error" ? "text-rose-400 border-rose-500/20 bg-rose-500/10"
         : sev === "warning" ? "text-amber-400 border-amber-500/20 bg-amber-500/10"
@@ -1022,6 +1053,53 @@ function FindingCard({ f }: { f: FindingRow }) {
                                     <div key={i} className={ln.startsWith("+") && !ln.startsWith("+++") ? "text-emerald-400" : ln.startsWith("-") && !ln.startsWith("---") ? "text-rose-400" : "text-slate-400"}>{ln}</div>
                                 ))}
                             </pre>
+                        </div>
+                    )}
+
+                    {/* The test IS the evidence. `patch_validated` means this
+                        failed before the patch and passed after — the only
+                        sequence that shows the patch changed the outcome.
+                        Summarising it would throw away the proof. */}
+                    {f.unit_test && (
+                        <div>
+                            <span className="text-[9px] uppercase tracking-widest text-slate-500 font-bold font-mono">
+                                {f.patch_validated ? "The test that proves it" : "Generated test (unproven)"}
+                            </span>
+                            <pre className="mt-1 text-[10px] leading-relaxed bg-slate-950 border border-slate-800 rounded-lg p-3 overflow-x-auto font-mono text-slate-400">
+                                {f.unit_test}
+                            </pre>
+                        </div>
+                    )}
+
+                    {f.unified_diff && f.is_vulnerability && (
+                        <div className="pt-1">
+                            {prState === "done" && prUrl ? (
+                                <a href={prUrl} target="_blank" rel="noopener noreferrer"
+                                   className="inline-flex items-center gap-2 text-[11px] font-bold px-3 py-2 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 hover:bg-emerald-500/15">
+                                    Pull request opened — view on GitHub ↗
+                                </a>
+                            ) : (
+                                <button
+                                    type="button"
+                                    onClick={openPullRequest}
+                                    disabled={prState === "opening"}
+                                    className={`inline-flex items-center gap-2 text-[11px] font-bold px-3 py-2 rounded-lg border transition-colors disabled:opacity-50 ${
+                                        f.patch_validated
+                                            ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/25 hover:bg-emerald-500/15"
+                                            : "bg-slate-800/60 text-slate-300 border-slate-700 hover:bg-slate-800"
+                                    }`}
+                                >
+                                    {prState === "opening" ? "Opening pull request…" : "Open pull request"}
+                                </button>
+                            )}
+                            {!f.patch_validated && prState === "idle" && (
+                                <p className="text-[10px] text-amber-400/80 mt-2 font-mono">
+                                    This patch has not been proven by a test. Review the diff before merging.
+                                </p>
+                            )}
+                            {prState === "error" && prError && (
+                                <p className="text-[10px] text-rose-400 mt-2 leading-relaxed">{prError}</p>
+                            )}
                         </div>
                     )}
                 </div>

@@ -14,9 +14,21 @@ export async function GET(request: NextRequest) {
     // Smart routing based on action type:
     // - Password recovery -> defaults to /reset-password
     // - Signup confirmation / login / other -> defaults to /dashboard
+    // `next` decides where a user lands the instant their session cookie is
+    // set, so it only ever names a path on this site. Anything that is not a
+    // single-slash-prefixed path — an absolute URL, a protocol-relative
+    // //evil.com, a backslash variant — is discarded rather than corrected.
+    const safeNext = (value: string | null): string | null => {
+        if (!value) return null;
+        if (!value.startsWith('/')) return null;
+        if (value.startsWith('//') || value.startsWith('/\\')) return null;
+        return value;
+    };
+
     let next = '/dashboard';
-    if (nextParam) {
-        next = nextParam;
+    const requested = safeNext(nextParam);
+    if (requested) {
+        next = requested;
     } else if (type === 'recovery') {
         next = '/reset-password';
     }

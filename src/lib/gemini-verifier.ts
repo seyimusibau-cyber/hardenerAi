@@ -35,7 +35,7 @@ export async function verifyAndPatchFinding(codeSnippet: string, sarifFinding: o
     // string in two places means a deprecation takes one of them out silently:
     // the call 404s, the catch below returns is_vulnerability:false, and every
     // finding reads as clean.
-    model: process.env.GEMINI_MODEL || "gemini-2.5-flash",
+    model: process.env.GEMINI_MODEL || "gemini-3.7-flash",
     generationConfig: {
       responseMimeType: "application/json",
       responseSchema: responseSchema,

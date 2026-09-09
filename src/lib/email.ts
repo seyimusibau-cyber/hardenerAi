@@ -167,32 +167,32 @@ function buildPasswordResetHtml(params: {
               <td class="content">
                 <h1 class="title">Password Reset Request</h1>
                 <p class="text">
-                  We received a request to reset the password for your Vultix account (<strong>${email}</strong>).
+                  We received a request to reset the password for your Vultix account (<strong>${esc(email)}</strong>).
                 </p>
                 <p class="text">
                   To securely update your credentials, click the confirmation button below.
                 </p>
                 <div class="button-container">
-                  <a href="${resetLink}" target="_blank" class="button">Reset Password</a>
+                  <a href="${esc(resetLink)}" target="_blank" class="button">Reset Password</a>
                 </div>
                 <div class="security-notice">
                   <div class="security-title">Security Information</div>
                   <p class="security-text">
                     &bull; This link expires in <strong>${expiresInMinutes} minutes</strong> and can only be used once.<br>
                     &bull; If you did not make this request, you can safely disregard this email. Your current password remains secure.<br>
-                    ${ipAddress ? `&bull; Request origin IP: <code>${ipAddress}</code>` : ''}
+                    ${ipAddress ? `&bull; Request origin IP: <code>${esc(ipAddress)}</code>` : ''}
                   </p>
                 </div>
                 <div class="fallback-link">
                   If the button above does not work, copy and paste this link into your browser:<br>
-                  <a href="${resetLink}" target="_blank">${resetLink}</a>
+                  <a href="${esc(resetLink)}" target="_blank">${esc(resetLink)}</a>
                 </div>
               </td>
             </tr>
             <tr>
               <td class="footer">
                 &copy; ${year} Vultix Automated Security Platform. All rights reserved.<br>
-                This automated message was sent to ${email}.
+                This automated message was sent to ${esc(email)}.
               </td>
             </tr>
           </table>
@@ -232,6 +232,28 @@ Security Information:
  * Sends a password reset email via Resend if RESEND_API_KEY is configured.
  * Configured with RFC 8058 compliant headers to ensure high inbox deliverability.
  */
+
+/**
+ * Escape a value before it goes into an HTML email.
+ *
+ * `ipAddress` reaches here from the X-Forwarded-For header, which a client can
+ * set. Interpolated raw, a crafted header injects arbitrary markup into an
+ * email that is sent to a NAMED recipient and passes SPF, DKIM and DMARC —
+ * a phishing message that is genuinely from vultix.co.uk. `email` is
+ * attacker-chosen too, and only weakly validated upstream.
+ *
+ * Whether the platform lets XFF through varies by host, so this is defence in
+ * depth rather than a patch for a confirmed path — and it costs one call.
+ */
+function esc(value: unknown): string {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 export async function sendPasswordResetEmail(
     params: SendPasswordResetEmailParams
 ): Promise<EmailResult> {
@@ -451,10 +473,10 @@ export function buildSignupConfirmationHtml(params: {
               <td class="content">
                 <h1 class="title">Verify Your Email Address</h1>
                 <p class="text">
-                  Welcome to Vultix. To finalize your account setup (<strong>${email}</strong>) and unlock automated repository security scanning, verify your email address below:
+                  Welcome to Vultix. To finalize your account setup (<strong>${esc(email)}</strong>) and unlock automated repository security scanning, verify your email address below:
                 </p>
                 <div class="button-container">
-                  <a href="${confirmLink}" target="_blank" class="button">Confirm My Account</a>
+                  <a href="${esc(confirmLink)}" target="_blank" class="button">Confirm My Account</a>
                 </div>
                 <div class="security-notice">
                   <div class="security-title">Security Information</div>
@@ -465,14 +487,14 @@ export function buildSignupConfirmationHtml(params: {
                 </div>
                 <div class="fallback-link">
                   If the button above does not work, copy and paste this link into your browser:<br>
-                  <a href="${confirmLink}" target="_blank">${confirmLink}</a>
+                  <a href="${esc(confirmLink)}" target="_blank">${esc(confirmLink)}</a>
                 </div>
               </td>
             </tr>
             <tr>
               <td class="footer">
                 &copy; ${year} Vultix Automated Security Platform. All rights reserved.<br>
-                This confirmation was dispatched to ${email}.
+                This confirmation was dispatched to ${esc(email)}.
               </td>
             </tr>
           </table>

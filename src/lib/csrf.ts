@@ -35,7 +35,14 @@ export async function generateCsrfToken(): Promise<string> {
     const cookieStore = await cookies();
     
     cookieStore.set(CSRF_COOKIE_NAME, token, {
-        httpOnly: true,
+        // NOT httpOnly, deliberately. Double-submit works by having the client
+        // read this cookie and echo it in a header; the server then checks the
+        // two match. An attacker on another origin can force the browser to
+        // SEND the cookie but the same-origin policy stops them READING it, so
+        // they cannot produce the matching header. httpOnly here made the
+        // scheme unimplementable — the client could never echo anything, which
+        // is why no caller ever set a token and every guarded route 403'd.
+        httpOnly: false,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'strict',
         maxAge: TOKEN_EXPIRY_MS / 1000,
@@ -96,7 +103,62 @@ export async function deleteCsrfToken(): Promise<void> {
 }
 
 // ============================================================================
-// CSRF Middleware Helper
+// Edge-safe token handling
+// ============================================================================
+// `cookies()` from next/headers is not available in middleware, and middleware
+// is where the check runs. These read straight off the request instead. The
+// previous code only avoided crashing because the token was always missing, so
+// it returned before ever calling the next/headers path.
+
+export const CSRF_COOKIE = CSRF_COOKIE_NAME;
+export const CSRF_HEADER = CSRF_HEADER_NAME;
+
+/** A fresh token. Pure — the caller decides where to store it. */
+export function newCsrfToken(): string {
+    const bytes = new Uint8Array(CSRF_TOKEN_LENGTH);
+    globalThis.crypto.getRandomValues(bytes);
+    return Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * Validate a state-changing request from its own cookies and headers.
+ *
+ * Returns `valid` plus whether a token was present at all, so the caller can
+ * tell "you never had one" (refresh and retry) from "yours did not match"
+ * (a real mismatch worth logging).
+ */
+export function validateCsrfRequest(request: {
+    method: string;
+    cookies: { get(name: string): { value: string } | undefined };
+    headers: { get(name: string): string | null };
+}): { valid: boolean; hadToken: boolean; error?: string } {
+    const method = request.method.toUpperCase();
+    if (!['POST', 'PUT', 'DELETE', 'PATCH'].includes(method)) {
+        return { valid: true, hadToken: true };
+    }
+
+    const header = request.headers.get(CSRF_HEADER_NAME);
+    const cookie = request.cookies.get(CSRF_COOKIE_NAME)?.value;
+
+    if (!header || !cookie) {
+        return {
+            valid: false,
+            hadToken: false,
+            error: 'CSRF token missing. Refresh the page and try again.',
+        };
+    }
+    if (!timingSafeEqual(cookie, header)) {
+        return {
+            valid: false,
+            hadToken: true,
+            error: 'CSRF token did not match. Refresh the page and try again.',
+        };
+    }
+    return { valid: true, hadToken: true };
+}
+
+// ============================================================================
+// CSRF Middleware Helper (legacy, route-handler context only)
 // ============================================================================
 export async function requireCsrfToken(request: Request): Promise<{
     valid: boolean;

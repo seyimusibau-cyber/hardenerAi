@@ -4,6 +4,7 @@ import { rateLimit } from '@/lib/rate-limiter';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
+import { createClient as createServiceClient } from '@supabase/supabase-js';
 import { parseDiffPath, applyUnifiedDiff } from '@/lib/apply-diff';
 
 // POST /api/pr { findingId } -> opens a GitHub PR with the finding's validated
@@ -148,9 +149,22 @@ export async function POST(request: Request) {
             }),
         });
 
-        await supabase.from('remediation_prs').insert({
+        // Service role: `remediation_prs` has a SELECT policy and no INSERT
+        // one (003), so a user-scoped write is silently rejected by RLS — the
+        // pull request would open on GitHub and leave no record here. Rows are
+        // server-owned, like `findings` and now `scans`.
+        const admin = createServiceClient(
+            process.env.NEXT_PUBLIC_SUPABASE_URL!,
+            process.env.SUPABASE_SERVICE_ROLE_KEY!,
+            { auth: { persistSession: false } },
+        );
+        const { error: prRowError } = await admin.from('remediation_prs').insert({
             finding_id: findingId, user_id: user.id, pr_url: pr.html_url, pr_number: pr.number, status: 'open',
         });
+        // The PR is already open on GitHub at this point, so this cannot fail
+        // the request — but an unrecorded PR is invisible to the dashboard and
+        // would be opened twice on the next click.
+        if (prRowError) console.error('[pr] failed to record remediation_pr:', prRowError.message);
         return NextResponse.json({ pr_url: pr.html_url, pr_number: pr.number, auto_applied: applied });
     } catch (err) {
         console.error('PR route error:', err);
