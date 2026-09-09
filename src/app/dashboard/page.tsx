@@ -337,14 +337,16 @@ export default function UserDashboard() {
 
                 if (!dbErr && insertData) {
                     setScans((prev) => [insertData as ScanRecord, ...prev]);
-                    
-                    const newScansUsed = (profile?.monthly_scans_used || 0) + 1;
-                    await supabase
-                        .from("profiles")
-                        .update({ monthly_scans_used: newScansUsed })
-                        .eq("id", user.id);
 
-                    setProfile((prev) => prev ? { ...prev, monthly_scans_used: newScansUsed } : null);
+                    // The quota is incremented server-side by POST /api/scan
+                    // under the service role. Migration 005 revoked the
+                    // browser's UPDATE grant on this column, so writing it from
+                    // here now fails — and should: a counter the client can
+                    // rewrite is not a limit. Reflect the new value locally so
+                    // the meter moves; the server holds the truth.
+                    setProfile((prev) =>
+                        prev ? { ...prev, monthly_scans_used: (prev.monthly_scans_used || 0) + 1 } : null,
+                    );
                 }
             }
 

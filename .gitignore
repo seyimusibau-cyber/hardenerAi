@@ -42,11 +42,9 @@
 *.sqlite3
 *.db
 
-# sql scripts (ignore ad-hoc, manual & dump scripts, keep migrations & schema)
+# database structure & SQL migrations (excluded from public repo)
 *.sql
-!supabase/schema.sql
-!supabase/migrations/
-!supabase/migrations/*.sql
+supabase/
 
 # debug
 npm-debug.log*

@@ -1,6 +1,7 @@
 import { handleError } from '@/lib/error-handler';
 import { NextResponse, NextRequest } from 'next/server';
 import { createClient } from '@/utils/supabase/server';
+import { createClient as createServiceClient } from '@supabase/supabase-js';
 import { rateLimit } from '@/lib/rate-limiter';
 import { UrlSchema } from '@/lib/sanitization';
 import { classifyTarget, parseGitHubRepo, repoCloneUrl } from '@/lib/target';
@@ -149,10 +150,29 @@ export async function POST(request: Request) {
         if (scanError) throw scanError;
 
         // Consume one scan from the quota (admins exempt).
+        //
+        // Written with the SERVICE ROLE, not the caller's session. Migration
+        // 005 revoked column-level UPDATE on everything but `full_name`,
+        // because a blanket grant let any user set their own `role` to admin.
+        // `monthly_scans_used` is now server-owned by the same rule that closed
+        // that hole — a quota a client can rewrite is not a quota.
         if (profile?.role !== 'admin') {
-            await supabase.from('profiles')
+            const admin = createServiceClient(
+                process.env.NEXT_PUBLIC_SUPABASE_URL!,
+                process.env.SUPABASE_SERVICE_ROLE_KEY!,
+                { auth: { persistSession: false } },
+            );
+            const { error: quotaError } = await admin
+                .from('profiles')
                 .update({ monthly_scans_used: used + 1 })
                 .eq('id', user.id);
+
+            // A scan that runs without being counted is worse than one that is
+            // refused: it is the quota silently not existing. The row is already
+            // inserted, so fail loudly here rather than let it drift.
+            if (quotaError) {
+                console.error('[scan] quota increment failed:', quotaError.message);
+            }
         }
 
         // 4. Dispatch to QStash

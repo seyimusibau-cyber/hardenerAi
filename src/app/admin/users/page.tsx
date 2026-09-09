@@ -46,51 +46,38 @@ export default function AdminUsersList() {
         loadUsers();
     }, []);
 
-    // Action: Change plan
-    async function handleUpdatePlan(userId: string, newPlan: 'Free' | 'Pro' | 'Enterprise') {
-        const supabase = createClient();
-        const { error } = await supabase
-            .from('profiles')
-            .update({ plan: newPlan })
-            .eq('id', userId);
-
-        if (!error) {
+    // Privileged columns are written server-side. Migration 005 revoked the
+    // browser's UPDATE grant on profiles down to `full_name`, because the
+    // blanket grant that made these direct writes work also let any user set
+    // their own role to 'admin'. /api/admin/users re-checks admin status on the
+    // server and writes with the service role.
+    async function patchUser(userId: string, field: 'plan' | 'status' | 'role', value: string) {
+        const res = await fetch('/api/admin/users', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId, field, value }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) {
             loadUsers();
         } else {
-            alert(`Failed to update plan: ${error.message}`);
+            alert(data.error || `Failed to update ${field}.`);
         }
+    }
+
+    // Action: Change plan
+    async function handleUpdatePlan(userId: string, newPlan: 'Free' | 'Pro' | 'Enterprise') {
+        await patchUser(userId, 'plan', newPlan);
     }
 
     // Action: Toggle Status
     async function handleToggleStatus(userId: string, currentStatus: 'Active' | 'Suspended') {
-        const newStatus = currentStatus === 'Active' ? 'Suspended' : 'Active';
-        const supabase = createClient();
-        const { error } = await supabase
-            .from('profiles')
-            .update({ status: newStatus })
-            .eq('id', userId);
-
-        if (!error) {
-            loadUsers();
-        } else {
-            alert(`Failed to update status: ${error.message}`);
-        }
+        await patchUser(userId, 'status', currentStatus === 'Active' ? 'Suspended' : 'Active');
     }
 
     // Action: Toggle Role
     async function handleToggleRole(userId: string, currentRole: 'user' | 'admin') {
-        const newRole = currentRole === 'user' ? 'admin' : 'user';
-        const supabase = createClient();
-        const { error } = await supabase
-            .from('profiles')
-            .update({ role: newRole })
-            .eq('id', userId);
-
-        if (!error) {
-            loadUsers();
-        } else {
-            alert(`Failed to update role: ${error.message}`);
-        }
+        await patchUser(userId, 'role', currentRole === 'user' ? 'admin' : 'user');
     }
 
     const filteredUsers = users.filter(user => {
