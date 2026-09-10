@@ -1,1109 +1,572 @@
 "use client";
 
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 
-import React, { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
-import { csrfFetch } from "@/lib/csrf-client";
+import { TargetList, type TargetRow } from "@/components/vultix/TargetList";
+import { GitBranch, Globe, ArrowRight, Search, ShieldAlert, FileCode2, PlayCircle, BadgeCheck } from "lucide-react";
 
-interface ScanCheck {
-    name: string;
-    status: 'Passed' | 'Failed';
-    value: string;
-    description: string;
-    severity: 'high' | 'medium' | 'low';
-    remediation: string;
-}
+/**
+ * The overview.
+ *
+ * The page answers one question — WHAT SHOULD I DO NEXT? — and ranks everything
+ * by how close it sits to that answer.
+ *
+ * MOBILE IS THE CONSTRAINT, NOT AN AFTERTHOUGHT. The previous version pushed
+ * past the viewport on a phone because the two header buttons sat in a
+ * `shrink-0` container needing ~325px on a 360px screen. Nothing here may be
+ * both fixed-width and unshrinkable: every horizontal run either wraps, has
+ * `min-w-0`, or truncates. `overflow-x-hidden` on the shell is the backstop,
+ * not the fix.
+ *
+ * Each module is a CARD so that prose is contained rather than running loose
+ * down the page, and so the stack on a phone has visible boundaries. Cards
+ * differ by the shape of what is inside them — a stepped ladder, a timeline, a
+ * stacked bar, a chip grid — because repeating one shape is what made an
+ * earlier version read as amateur.
+ */
 
-interface ScanResult {
-    url: string;
-    score: number;
-    grade: string;
-    server: string;
-    poweredBy: string;
-    checks: ScanCheck[];
-    scannedAt: string;
-}
-
-interface ScanRecord {
-    id: string;
-    target_url: string;
-    status: 'Running' | 'Completed' | 'Failed';
-    progress: number;
-    vulns_found: number;
-    time_taken: string | null;
-    error_message: string | null;
-    score: number | null;
-    grade: string | null;
-    checks: ScanCheck[] | null;
-    created_at: string;
-}
-
-interface UserProfile {
-    full_name: string | null;
+interface Profile {
     email: string | null;
-    plan: 'Free' | 'Pro' | 'Enterprise';
-    role: 'user' | 'admin';
+    full_name: string | null;
+    plan: "Free" | "Pro" | "Enterprise";
     monthly_scans_used: number;
     quota_reset_date: string | null;
 }
 
-function CheckCard({ check }: { check: ScanCheck }) {
-    const [isOpen, setIsOpen] = useState(check.status === 'Failed');
+interface Domain {
+    id: string;
+    domain: string;
+    status: "pending" | "verified" | "failed";
+}
 
+interface ScanRow {
+    id: string;
+    target_id: string | null;
+    status: string;
+    stage: string | null;
+    score: number | null;
+    grade: string | null;
+    findings_assessed: number | null;
+    created_at: string;
+    error_message: string | null;
+}
+
+interface FindingLite {
+    severity: string | null;
+    rule_id: string | null;
+    is_vulnerability: boolean;
+    patch_applies: boolean;
+    patch_validated: boolean;
+    unified_diff: string | null;
+    estimated_patch_hours: number | null;
+    scans: { target_id: string | null };
+}
+
+const PLAN_SCANS: Record<string, number> = { Free: 5, Pro: 100, Enterprise: 100000 };
+
+/** The five rungs a finding can climb. Mirrors `rung()` in FindingCard. */
+const LADDER = [
+    { key: "candidate", label: "Candidate",  icon: Search },
+    { key: "confirmed", label: "Confirmed",  icon: ShieldAlert },
+    { key: "written",   label: "Patched",    icon: FileCode2 },
+    { key: "applies",   label: "Applies",    icon: PlayCircle },
+    { key: "proven",    label: "Proven",     icon: BadgeCheck },
+] as const;
+
+function ago(iso: string): string {
+    const m = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+    if (m < 2) return "just now";
+    if (m < 60) return `${m}m ago`;
+    const h = Math.floor(m / 60);
+    return h < 24 ? `${h}h ago` : `${Math.floor(h / 24)}d ago`;
+}
+
+/** A module. One padded, bordered box; the header is optional. */
+function Card({
+    title, aside, children, className = "",
+}: {
+    title?: string;
+    aside?: React.ReactNode;
+    children: React.ReactNode;
+    className?: string;
+}) {
     return (
-        <div className={`border rounded-xl transition-all ${
-            check.status === 'Passed'
-                ? 'bg-slate-900/45 border-slate-800/60'
-                : 'bg-red-500/[0.02] border-red-500/15'
-        }`}>
-            <button
-                type="button"
-                onClick={() => setIsOpen(!isOpen)}
-                className="w-full flex items-center justify-between p-4 font-sans text-left focus:outline-none rounded-xl"
-            >
-                <div className="flex items-center gap-3 min-w-0">
-                    {check.status === 'Passed' ? (
-                        <div className="w-6 h-6 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-500 shrink-0">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                        </div>
-                    ) : (
-                        <div className="w-6 h-6 rounded-full bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-500 shrink-0">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                        </div>
-                    )}
-                    <div className="truncate flex-grow">
-                        <div className="flex items-center gap-2">
-                            <span className="font-bold text-sm text-white">{check.name}</span>
-                            {check.status === 'Failed' && (
-                                <span className={`text-[8px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded border ${
-                                    check.severity === 'high' ? 'bg-red-500/10 text-red-400 border-red-500/20' :
-                                    check.severity === 'medium' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' :
-                                    'bg-slate-800 text-slate-400 border-slate-700'
-                                }`}>
-                                    {check.severity}
-                                </span>
-                            )}
-                        </div>
-                        <p className="text-xs text-slate-500 mt-0.5 font-mono truncate max-w-[200px] sm:max-w-md">{check.value}</p>
-                    </div>
-                </div>
-                <div className="flex items-center gap-3 text-slate-500 shrink-0 ml-2">
-                    <span className="text-xs hover:text-slate-300 font-medium hidden sm:inline">
-                        {isOpen ? "Hide Fix" : "Show Fix"}
-                    </span>
-                    <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="16"
-                        height="16"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        className={`transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
-                    >
-                        <polyline points="6 9 12 15 18 9" />
-                    </svg>
-                </div>
-            </button>
-
-            {isOpen && (
-                <div className="px-4 pb-5 border-t border-slate-800/40 pt-4 text-sm text-slate-400 leading-relaxed font-sans animate-in fade-in slide-in-from-top-2 duration-200">
-                    <p className="text-xs text-slate-450 mb-3">{check.description}</p>
-                    
-                    <div className="bg-slate-950 border border-slate-800 rounded-lg p-4 font-mono text-xs text-slate-300 relative group">
-                        <div className="absolute top-2.5 right-2.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    navigator.clipboard.writeText(check.remediation);
-                                    alert("Remediation code copied to clipboard!");
-                                }}
-                                className="p-1.5 bg-slate-900 border border-slate-800 text-slate-450 hover:text-white rounded"
-                                title="Copy snippet"
-                            >
-                                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                            </button>
-                        </div>
-                        <div className="text-[10px] text-slate-650 uppercase tracking-wider mb-2 font-bold select-none">Remediation Snippet</div>
-                        <pre className="overflow-x-auto select-all whitespace-pre-wrap">{check.remediation}</pre>
-                    </div>
+        <section className={`min-w-0 rounded-lg border border-slate-800/70 bg-ink-800 p-4 sm:p-5 ${className}`}>
+            {title && (
+                <div className="mb-4 flex items-baseline justify-between gap-3 border-b border-slate-800/70 pb-2.5">
+                    <h2 className="min-w-0 truncate font-mono text-[10px] uppercase tracking-[0.18em] text-slate-500">
+                        {title}
+                    </h2>
+                    {aside && <span className="shrink-0 font-mono text-[11px] text-slate-600">{aside}</span>}
                 </div>
             )}
-        </div>
+            {children}
+        </section>
     );
 }
 
-export default function UserDashboard() {
-    const [isLoading, setIsLoading] = useState(true);
-    const [profile, setProfile] = useState<UserProfile | null>(null);
-    const [scans, setScans] = useState<ScanRecord[]>([]);
-    const [selectedHistoryScan, setSelectedHistoryScan] = useState<ScanRecord | null>(null);
-    
-    // Scanner State
-    const [url, setUrl] = useState("");
-    const [isScanning, setIsScanning] = useState(false);
-    const [scanProgress, setScanProgress] = useState(0);
-    const [scanStatus, setScanStatus] = useState("");
-    const [scanError, setScanError] = useState<string | null>(null);
-    const [scanResult, setScanResult] = useState<ScanResult | null>(null);
-
-    // Domain TXT Verification State
-    const [verifyingDomain, setVerifyingDomain] = useState("");
-    const [verificationToken, setVerificationToken] = useState<string | null>(null);
-    const [isGeneratingToken, setIsGeneratingToken] = useState(false);
-    const [isCheckingDns, setIsCheckingDns] = useState(false);
-    const [dnsStatusMessage, setDnsStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-
+export default function DashboardHome() {
     const router = useRouter();
-    const supabase = createClient();
+    const [profile, setProfile] = useState<Profile | null>(null);
+    const [targets, setTargets] = useState<TargetRow[]>([]);
+    const [domains, setDomains] = useState<Domain[]>([]);
+    const [scans, setScans] = useState<ScanRow[]>([]);
+    const [findings, setFindings] = useState<FindingLite[]>([]);
+    const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        if (typeof window !== "undefined") {
-            const params = new URLSearchParams(window.location.search);
-            const domainParam = params.get("domain");
-            if (domainParam) {
-                setVerifyingDomain(domainParam);
-                setUrl(domainParam);
-            }
-        }
-    }, []);
-
-    const handleGenerateTxtToken = async (targetDomain?: string) => {
-        const domainToVerify = targetDomain || verifyingDomain || url;
-        if (!domainToVerify) return;
-        setIsGeneratingToken(true);
-        setDnsStatusMessage(null);
-
-        try {
-            const res = await csrfFetch("/api/verify-domain", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ action: "generate", domain: domainToVerify }),
-            });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error || "Failed to generate verification token.");
-            setVerificationToken(data.token);
-            setVerifyingDomain(domainToVerify);
-        } catch (err) {
-            setDnsStatusMessage({ type: 'error', text: err instanceof Error ? err.message : String(err) });
-        } finally {
-            setIsGeneratingToken(false);
-        }
-    };
-
-    const handleVerifyDnsRecord = async () => {
-        if (!verifyingDomain) return;
-        setIsCheckingDns(true);
-        setDnsStatusMessage(null);
-
-        try {
-            const res = await csrfFetch("/api/verify-domain", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ action: "verify", domain: verifyingDomain }),
-            });
-            const data = await res.json();
-            if (!res.ok || !data.success) {
-                throw new Error(data.error || "TXT record not detected in DNS yet. Please allow 1-2 minutes for DNS propagation.");
-            }
-            setDnsStatusMessage({ type: 'success', text: `Domain '${verifyingDomain}' successfully verified! Full automated DAST scans & remediation unlocked.` });
-        } catch (err) {
-            setDnsStatusMessage({ type: 'error', text: err instanceof Error ? err.message : String(err) });
-        } finally {
-            setIsCheckingDns(false);
-        }
-    };
-
-    useEffect(() => {
-        const fetchDashboardData = async () => {
-            try {
-                // 1. Verify User Session
-                const { data: { user } } = await supabase.auth.getUser();
-                if (!user) {
-                    router.push("/login");
-                    return;
-                }
-
-                // 2. Fetch User Profile
-                const { data: profileData, error: profileErr } = await supabase
-                    .from("profiles")
-                    .select("full_name, email, plan, role, monthly_scans_used, quota_reset_date")
-                    .eq("id", user.id)
-                    .single();
-
-                if (profileErr) throw profileErr;
-                setProfile(profileData as UserProfile);
-
-                // 3. Fetch User Scans
-                const { data: scansData, error: scansErr } = await supabase
-                    .from("scans")
-                    .select("*")
-                    .eq("user_id", user.id)
-                    .order("created_at", { ascending: false });
-
-                if (scansErr) throw scansErr;
-                setScans(scansData as ScanRecord[]);
-
-            } catch (err) {
-                console.error("Dashboard load failed:", err);
-            } finally {
-                setIsLoading(false);
-            }
-        };
-
-        fetchDashboardData();
-    }, [router, supabase]);
-
-    const handleSignOut = async () => {
-        try {
-            await supabase.auth.signOut();
-            router.push("/");
-        } catch (err) {
-            console.error("Signout failed:", err);
-        }
-    };
-
-    // Queue a real scan and follow it.
-    //
-    // This used to call GET /api/scan?url=, which is an HTTP HEADER AUDIT — it
-    // fetched the target and graded its response headers. Pasting a GitHub URL
-    // therefore graded github.com's headers and never cloned anything. The
-    // handler then wrote a "Completed" row into `scans` itself, which skipped
-    // classifyTarget, the domain verification gate, the quota, the concurrency
-    // cap and the QStash dispatch — so the scanner was never asked to run.
-    //
-    // POST /api/scan is the real pipeline. It returns 202 and a scanId; the row
-    // is written server-side and progresses Queued -> Running -> Completed. We
-    // follow that row rather than inventing progress.
-    const handleScan = async (e: React.FormEvent) => {
-        e.preventDefault();
-        const trimmed = url.trim();
-        if (!trimmed) return;
-
-        setIsScanning(true);
-        setScanProgress(0);
-        setScanStatus("Queueing scan...");
-        setScanError(null);
-        setScanResult(null);
-
-        let poll: ReturnType<typeof setInterval> | undefined;
-
-        try {
-            const res = await csrfFetch("/api/scan", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ targetUrl: trimmed }),
-            });
-            const data = await res.json();
-
-            if (!res.ok) {
-                // The route's messages are specific and worth showing verbatim:
-                // "Domain not verified...", "Monthly scan limit reached...",
-                // "Only GitHub repositories are supported...".
-                throw new Error(data.error || "The scan could not be started.");
+        let alive = true;
+        void (async () => {
+            const supabase = createClient();
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) {
+                router.push("/login");
+                return;
             }
 
-            const scanId: string | undefined = data.scanId;
-            if (!scanId) throw new Error("The scan was queued but returned no id.");
+            const [{ data: p }, { data: t }, { data: d }, { data: f }, { data: s }] = await Promise.all([
+                supabase.from("profiles").select("email, full_name, plan, monthly_scans_used, quota_reset_date").eq("id", user.id).single(),
+                supabase.from("targets").select("id, target_url, mode, last_scanned_at")
+                    .eq("user_id", user.id).order("last_scanned_at", { ascending: false, nullsFirst: false }).limit(10),
+                supabase.from("domain_verifications").select("id, domain, status").eq("user_id", user.id),
+                supabase.from("findings")
+                    .select("severity, rule_id, is_vulnerability, patch_applies, patch_validated, unified_diff, estimated_patch_hours, scans!inner(target_id)"),
+                supabase.from("scans").select("id, target_id, status, stage, score, grade, findings_assessed, created_at, error_message")
+                    .eq("user_id", user.id).order("created_at", { ascending: false }).limit(6),
+            ]);
+            if (!alive) return;
 
-            setScanStatus(
-                trimmed.includes("github.com")
-                    ? "Cloning repository, then Semgrep, Gitleaks and osv-scanner..."
-                    : "Probing the live host...",
+            setProfile((p as Profile) ?? null);
+            setDomains((d as Domain[]) ?? []);
+            setScans((s as ScanRow[]) ?? []);
+
+            const rows = (f ?? []) as unknown as FindingLite[];
+            setFindings(rows);
+
+            const byTarget = new Map<string, { proven: number; unproven: number }>();
+            for (const row of rows) {
+                if (!row.is_vulnerability) continue;
+                const id = row.scans?.target_id;
+                if (!id) continue;
+                const acc = byTarget.get(id) ?? { proven: 0, unproven: 0 };
+                if (row.patch_validated) acc.proven++; else acc.unproven++;
+                byTarget.set(id, acc);
+            }
+
+            const running = new Set(
+                ((s as ScanRow[]) ?? [])
+                    .filter((x) => x.status !== "Completed" && x.status !== "Failed")
+                    .map((x) => x.target_id)
+                    .filter(Boolean) as string[],
             );
 
-            // Follow the row the server owns. A real scan outruns a serverless
-            // timeout, so this is minutes, not seconds.
-            const started = Date.now();
-            const TIMEOUT_MS = 10 * 60 * 1000;
+            setTargets((((t as TargetRow[]) ?? []) as TargetRow[]).map((x) => {
+                const c = byTarget.get(x.id);
+                return {
+                    ...x,
+                    proven: c?.proven ?? 0,
+                    unproven: x.mode === "git" ? c?.unproven ?? 0 : 0,
+                    exposures: x.mode === "web" ? c?.unproven ?? 0 : 0,
+                    scanning: running.has(x.id),
+                };
+            }));
+            setLoading(false);
+        })();
+        return () => { alive = false; };
+    }, [router]);
 
-            await new Promise<void>((resolve, reject) => {
-                poll = setInterval(async () => {
-                    const { data: row } = await supabase
-                        .from("scans")
-                        .select("*")
-                        .eq("id", scanId)
-                        .single();
-
-                    if (row) {
-                        setScanProgress(row.progress ?? 0);
-                        setScans((prev) => {
-                            const rest = prev.filter((s) => s.id !== row.id);
-                            return [row as ScanRecord, ...rest];
-                        });
-
-                        if (row.status === "Completed") {
-                            setScanStatus("Complete");
-                            setScanProgress(100);
-                            setSelectedHistoryScan(row as ScanRecord);
-                            return resolve();
-                        }
-                        if (row.status === "Failed") {
-                            // A scan that cannot run is a failed scan and says
-                            // why — see the header of src/lib/runner.ts.
-                            return reject(new Error(row.error_message || "The scan failed."));
-                        }
-                        if (row.status === "Running") setScanStatus("Scanning...");
-                    }
-
-                    if (Date.now() - started > TIMEOUT_MS) {
-                        reject(new Error("The scan is taking longer than expected. It is still running — check your history in a few minutes."));
-                    }
-                }, 3000);
-            });
-
-            // The quota is incremented server-side; mirror it locally so the
-            // meter moves without a refresh.
-            setProfile((prev) =>
-                prev ? { ...prev, monthly_scans_used: (prev.monthly_scans_used || 0) + 1 } : null,
-            );
-        } catch (err) {
-            const msg = err instanceof Error ? err.message : "The scan could not be started.";
-            setScanError(msg);
-        } finally {
-            if (poll) clearInterval(poll);
-            setIsScanning(false);
-        }
-    };
-
-    const getQuotaLimit = (plan: 'Free' | 'Pro' | 'Enterprise') => {
-        if (plan === 'Enterprise') return 9999;
-        if (plan === 'Pro') return 100;
-        return 10;
-    };
-
-    if (isLoading) {
+    if (loading) {
         return (
-            <div className="min-h-screen bg-[#01040f] flex items-center justify-center p-4">
-                <div className="space-y-4 text-center">
-                    <div className="w-12 h-12 rounded-full border-4 border-emerald-500/20 border-t-emerald-500 animate-spin mx-auto"></div>
-                    <p className="text-xs text-slate-500 font-mono tracking-widest uppercase">Loading Secure Session...</p>
-                </div>
+            <div className="mx-auto w-full max-w-[1400px] px-4 py-8 sm:px-8 sm:py-9">
+                <div className="h-6 w-48 max-w-full animate-pulse rounded bg-slate-850" />
+                <div className="mt-8 h-24 animate-pulse rounded-lg bg-slate-850/60" />
+                <div className="mt-6 h-52 animate-pulse rounded-lg bg-slate-850/40" />
             </div>
         );
     }
 
-    const quotaLimit = profile ? getQuotaLimit(profile.plan) : 10;
-    const quotaPercentage = profile ? Math.min(100, (profile.monthly_scans_used / quotaLimit) * 100) : 0;
+    const real = findings.filter((f) => f.is_vulnerability);
+    const proven = real.filter((f) => f.patch_validated).length;
+    const unproven = real.length - proven;
+    const dismissed = findings.length - real.length;
+
+    // Each rung counts findings that reached AT LEAST that far, so the shape
+    // narrows and the drop-off is the story.
+    const reached: Record<string, number> = {
+        candidate: findings.length,
+        confirmed: real.length,
+        written: real.filter((f) => f.unified_diff).length,
+        applies: real.filter((f) => f.patch_applies).length,
+        proven,
+    };
+
+    const sev = {
+        error: real.filter((f) => (f.severity || "").toLowerCase() === "error").length,
+        warning: real.filter((f) => (f.severity || "").toLowerCase() === "warning").length,
+        note: real.filter((f) => !["error", "warning"].includes((f.severity || "note").toLowerCase())).length,
+    };
+    const sevTotal = sev.error + sev.warning + sev.note;
+
+    const hoursSaved = real
+        .filter((f) => f.patch_validated)
+        .reduce((n, f) => n + (f.estimated_patch_hours ?? 0), 0);
+
+    const ruleCounts = new Map<string, number>();
+    for (const f of real) {
+        const r = (f.rule_id || "").split(".").pop() || f.rule_id;
+        if (r) ruleCounts.set(r, (ruleCounts.get(r) ?? 0) + 1);
+    }
+    const topRules = [...ruleCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
+
+    const used = profile?.monthly_scans_used ?? 0;
+    const planName = profile?.plan ?? "Free";
+    const limit = PLAN_SCANS[planName] ?? 5;
+    const unlimited = limit >= 100000;
+    const verified = domains.filter((d) => d.status === "verified").length;
+    const pending = domains.filter((d) => d.status === "pending").length;
+    const first = (profile?.full_name || profile?.email || "").split(/[\s@]/)[0];
+    const quotaPct = unlimited ? 0 : Math.min(100, Math.round((used / limit) * 100));
+    const failed = scans.find((s) => s.status === "Failed");
+    const scanning = targets.some((t) => t.scanning);
+    const targetName = (id: string | null) => {
+        const t = targets.find((x) => x.id === id);
+        if (!t) return "a target";
+        return t.target_url.replace(/^https?:\/\//, "").replace(/\.git$/, "").split("/").slice(-1)[0];
+    };
 
     return (
-        <div className="min-h-screen bg-[#01040f] text-slate-100 font-sans selection:bg-emerald-500/30 selection:text-white pb-16">
-            {/* Nav */}
-            <nav className="fixed top-0 w-full z-50 bg-[#020617] border-b border-slate-800">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <div className="flex justify-between h-16 items-center">
-                        <Link href="/" className="flex items-center gap-2">
-                            <img
-                                src="/logo.png"
-                                alt="Vultix Logo"
-                                className="w-6 h-6 rounded-md object-contain border border-slate-800"
-                            />
-                            <span className="text-lg font-bold tracking-tight text-white">
-                                Vult<span className="text-emerald-500">ix</span>
+        <div className="mx-auto w-full max-w-[1400px] px-4 py-8 sm:px-8 sm:py-9">
+            {/* ---- The verdict. The only uncarded block: it is the lead. ---- */}
+            <header>
+                <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-slate-600">
+                    {first ? `Welcome back, ${first}` : "Welcome back"}
+                </p>
+                <h1 className="mt-2.5 max-w-[46ch] text-[22px] font-semibold leading-[1.25] tracking-[-0.02em] text-white sm:text-[26px]">
+                    {scanning ? (
+                        <>A scan is running.</>
+                    ) : proven > 0 ? (
+                        <>
+                            <span className="text-emerald-400">
+                                {proven === 1 ? "One fix is" : `${proven} fixes are`} proven
+                            </span>{" "}
+                            and ready to open as pull requests.
+                        </>
+                    ) : unproven > 0 ? (
+                        <>
+                            <span className="text-amber-400">
+                                {unproven} {unproven === 1 ? "issue needs" : "issues need"} review
                             </span>
-                        </Link>
+                            . None proven by a test yet.
+                        </>
+                    ) : targets.length === 0 ? (
+                        <>Nothing is being watched yet.</>
+                    ) : (
+                        <>Everything you are watching is clean.</>
+                    )}
+                </h1>
 
-                        <div className="flex items-center gap-6 text-sm">
-                            <Link href="/docs" className="text-slate-400 hover:text-white transition-colors">
-                                Docs
-                            </Link>
-                            {profile?.role === 'admin' && (
-                                <Link href="/admin" className="text-slate-400 hover:text-white font-bold transition-colors">
-                                    Admin Dashboard
-                                </Link>
-                            )}
-                            <button
-                                onClick={handleSignOut}
-                                className="bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-350 px-4 py-2 rounded-lg font-bold transition-all cursor-pointer text-xs"
-                            >
-                                Sign Out
-                            </button>
-                        </div>
-                    </div>
+                {/* Buttons stack and go full width on a phone. The old version
+                    put them in a `shrink-0` row needing ~325px on a 360px
+                    screen, which is what pushed the page sideways. */}
+                <div className="mt-5 grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:items-center">
+                    <Link
+                        href="/dashboard/scan/github"
+                        className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-md bg-slate-100 px-3.5 py-2.5 text-[13px] font-medium text-slate-950 transition-colors hover:bg-white sm:py-2"
+                    >
+                        <GitBranch className="h-3.5 w-3.5 shrink-0" />
+                        Scan a repository
+                    </Link>
+                    <Link
+                        href="/dashboard/scan/website"
+                        className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-md border border-slate-800 px-3.5 py-2.5 text-[13px] text-slate-300 transition-colors hover:border-slate-700 hover:text-white sm:py-2"
+                    >
+                        <Globe className="h-3.5 w-3.5 shrink-0" />
+                        Scan a website
+                    </Link>
                 </div>
-            </nav>
+            </header>
 
-            {/* Dashboard Content */}
-            <main className="pt-24 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
-                {/* Header Welcome */}
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-6 rounded-2xl bg-slate-900 border border-slate-800/80 relative overflow-hidden">
-                    <div className="absolute top-0 right-0 w-80 h-80 bg-emerald-500/5 blur-[120px] rounded-full"></div>
-                    <div className="relative z-10 space-y-1">
-                        <h1 className="text-xl font-bold text-white tracking-tight">
-                            Welcome back, {profile?.full_name || "Developer"}!
-                        </h1>
-                        <p className="text-xs text-slate-400">
-                            Perform security header scans and copy remediation templates directly from your dashboard.
-                        </p>
-                    </div>
-                </div>
+            {failed?.error_message && (
+                <p className="mt-6 overflow-hidden rounded-r border-l-2 border-rose-500/70 bg-rose-500/5 py-2.5 pl-3.5 pr-3 text-[12.5px] leading-relaxed break-words text-rose-300/90">
+                    Last scan failed: {failed.error_message.slice(0, 160)}
+                </p>
+            )}
 
-                {/* Domain TXT Verification Card */}
-                <div className="p-4 sm:p-6 rounded-2xl bg-slate-900 border border-slate-800 space-y-4 relative overflow-hidden">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                        <div>
-                            <div className="flex items-center gap-2">
-                                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                                <h2 className="text-xs font-bold text-slate-450 uppercase tracking-widest font-mono">Domain Verification Center</h2>
-                            </div>
-                            <h3 className="text-lg font-bold text-white mt-1">Verify Domain Ownership via DNS TXT Record</h3>
-                            <p className="text-xs text-slate-400 mt-1 max-w-xl">
-                                Prove ownership of your web application domain to unlock full DAST vulnerability scanning, automated PR patches, and complete remediation profiles.
-                            </p>
-                        </div>
-                    </div>
+            {/* ---- The numbers ------------------------------------------- */}
+            <section className="mt-7 grid grid-cols-2 overflow-hidden rounded-lg border border-slate-800/70 bg-ink-800 sm:grid-cols-4">
+                <Stat label="Proven" value={proven} tone={proven > 0 ? "emerald" : "muted"} note="by a test" />
+                <Stat label="Review" value={unproven} tone={unproven > 0 ? "amber" : "muted"} note="unproven" />
+                <Stat label="Domains" value={verified} tone="plain" note={pending > 0 ? `${pending} pending` : "verified"} href="/dashboard/domains" />
+                <Stat
+                    label="Scans" value={used} suffix={unlimited ? undefined : `/ ${limit}`}
+                    tone="plain" note={`${planName} plan`} href="/dashboard/plan"
+                    meter={unlimited ? undefined : quotaPct}
+                />
+            </section>
 
-                    <div className="pt-2 flex flex-col sm:flex-row gap-3 max-w-3xl">
-                        <input
-                            type="text"
-                            value={verifyingDomain}
-                            onChange={(e) => setVerifyingDomain(e.target.value)}
-                            placeholder="Enter domain to verify (e.g. example.com)"
-                            className="bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500 font-mono flex-grow"
-                        />
-                        <button
-                            type="button"
-                            onClick={() => handleGenerateTxtToken()}
-                            disabled={isGeneratingToken}
-                            className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer shadow-md shadow-emerald-500/10"
-                        >
-                            {isGeneratingToken ? "Generating TXT..." : "Generate TXT Record"}
-                        </button>
-                    </div>
-
-                    {/* Generated Token Display Box */}
-                    {verificationToken && (
-                        <div className="p-4 bg-slate-950 border border-slate-800 rounded-xl space-y-3 animate-in fade-in duration-300">
-                            <div className="flex items-center justify-between text-xs text-slate-400 font-mono">
-                                <span className="font-bold text-emerald-400 uppercase text-[10px] tracking-wider">DNS Record Details</span>
-                                <span>Record Type: <strong className="text-white">TXT</strong></span>
-                            </div>
-                            <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg flex items-center justify-between font-mono text-xs text-white">
-                                <div className="truncate mr-2">
-                                    <span className="text-slate-500 select-none">Value: </span>
-                                    <span className="text-emerald-300 font-bold">{verificationToken}</span>
-                                </div>
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        navigator.clipboard.writeText(verificationToken);
-                                        alert("TXT record copied to clipboard!");
-                                    }}
-                                    className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded text-[11px] font-bold transition-all shrink-0"
-                                >
-                                    Copy Token
-                                </button>
-                            </div>
-                            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-1">
-                                <p className="text-[11px] text-slate-500">
-                                    Add this TXT record to your DNS provider (Cloudflare, Vercel, Route53, Namecheap), then click verify below.
-                                </p>
-                                <button
-                                    type="button"
-                                    onClick={handleVerifyDnsRecord}
-                                    disabled={isCheckingDns}
-                                    className="w-full sm:w-auto px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition-all shrink-0 cursor-pointer shadow-md shadow-emerald-500/10"
-                                >
-                                    {isCheckingDns ? "Querying DNS..." : "Verify DNS Record"}
-                                </button>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Status Alert */}
-                    {dnsStatusMessage && (
-                        <div className={`p-4 rounded-xl text-xs flex items-center gap-3 animate-in fade-in ${
-                            dnsStatusMessage.type === 'success' ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-300' : 'bg-red-500/10 border border-red-500/20 text-red-400'
-                        }`}>
-                            <span className="font-bold">{dnsStatusMessage.text}</span>
-                        </div>
-                    )}
-                </div>
-
-                {/* Codebase & GitHub Repository Audit Section */}
-                <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800/80 space-y-6 relative overflow-hidden">
-                    <div className="absolute top-0 left-0 w-96 h-96 bg-emerald-500/[0.02] blur-[100px] rounded-full pointer-events-none"></div>
-                    <div>
-                        <div className="flex items-center gap-2">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-emerald-400"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
-                            <h2 className="text-xs font-bold text-slate-450 uppercase tracking-widest font-mono">Codebase & GitHub Scanner</h2>
-                        </div>
-                        <h3 className="text-lg font-bold text-white mt-1">Scan Web Domain or GitHub Repository</h3>
-                        <p className="text-xs text-slate-400 mt-1 max-w-xl">
-                            Search source code files across your GitHub repository or test live HTTP endpoints for vulnerability patterns, AST logical flaws, and exposed credentials.
-                        </p>
-                    </div>
-
-                    <form onSubmit={handleScan} className="max-w-3xl flex flex-col sm:flex-row gap-3 relative z-10">
-                        <div className="relative flex-grow">
-                            <input
-                                type="text"
-                                value={url}
-                                onChange={(e) => setUrl(e.target.value)}
-                                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-5 py-3.5 text-sm text-white focus:outline-none focus:border-emerald-500 transition-all font-mono placeholder:text-slate-650"
-                                placeholder="Enter your app URL (e.g., example.com)"
-                                required
-                                disabled={isScanning}
-                            />
-                        </div>
-                        <button
-                            type="submit"
-                            disabled={isScanning}
-                            className={`px-8 py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-sm font-bold transition-all shrink-0 cursor-pointer shadow-lg shadow-emerald-500/10 ${isScanning ? 'opacity-70 cursor-not-allowed' : ''}`}
-                        >
-                            {isScanning ? "Running Audit..." : "Start Free Scan"}
-                        </button>
-                    </form>
-
-                    {/* Scanning Progress */}
-                    {isScanning && (
-                        <div className="space-y-3 max-w-3xl border border-slate-850 p-4 rounded-xl bg-slate-950/45 animate-in fade-in duration-300">
-                            <div className="flex justify-between text-xs">
-                                <span className="text-slate-400 font-medium font-mono">{scanStatus}</span>
-                                <span className="text-slate-350 font-bold font-mono">{scanProgress}%</span>
-                            </div>
-                            <div className="w-full h-1.5 bg-slate-900 border border-slate-850 rounded-full overflow-hidden">
-                                <div
-                                    className="h-full bg-emerald-500 transition-all duration-300 shadow-[0_0_8px_rgba(16,185,129,0.5)]"
-                                    style={{ width: `${scanProgress}%` }}
-                                ></div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Scan Error Alert */}
-                    {scanError && (
-                        <div className="p-4 bg-red-500/10 border border-red-500/20 text-red-400 rounded-xl text-xs flex gap-3 max-w-3xl animate-in fade-in duration-300">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="shrink-0"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                            <div className="space-y-1">
-                                <p className="font-bold text-white">Scan Audit Interrupted</p>
-                                <p className="leading-relaxed">{scanError}</p>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Active Scan Report Section */}
-                    {scanResult && (
-                        <div id="scan-report-results" className="pt-6 border-t border-slate-800/60 space-y-6 animate-in fade-in slide-in-from-top-4 duration-500 relative z-10">
-                            {/* Summary Card Grid */}
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 bg-slate-950/40 border border-slate-850 rounded-2xl p-6">
-                                {/* SVG Radial Gauge */}
-                                <div className="flex flex-col items-center justify-center py-4 border-b md:border-b-0 md:border-r border-slate-850">
-                                    <span className="text-[10px] text-slate-500 font-mono uppercase tracking-widest mb-3">Audited Score</span>
-                                    <div className="relative w-28 h-28">
-                                        <svg className="w-full h-full transform -rotate-95" viewBox="0 0 36 36">
-                                            <path
-                                                className="text-slate-850"
-                                                strokeWidth="2.5"
-                                                stroke="currentColor"
-                                                fill="none"
-                                                d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                                            />
-                                            <path
-                                                className={scanResult.score >= 80 ? 'text-emerald-500' : scanResult.score >= 50 ? 'text-amber-500' : 'text-rose-500'}
-                                                strokeDasharray={`${scanResult.score}, 100`}
-                                                strokeWidth="2.5"
-                                                strokeLinecap="round"
-                                                stroke="currentColor"
-                                                fill="none"
-                                                d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                                            />
-                                        </svg>
-                                        <div className="absolute inset-0 flex flex-col items-center justify-center">
-                                            <span className="text-3xl font-bold text-white tracking-tighter">{scanResult.score}</span>
-                                            <span className="text-[7px] font-bold text-slate-550 uppercase tracking-widest mt-0.5">Safety Index</span>
-                                        </div>
+            {/* ---- Ladder + activity -------------------------------------- */}
+            <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-3">
+                <Card title="How far findings climbed" aside={String(findings.length)} className="lg:col-span-2">
+                    <div className="space-y-2.5">
+                        {LADDER.map((step) => {
+                            const n = reached[step.key] ?? 0;
+                            const pct = findings.length ? (n / findings.length) * 100 : 0;
+                            const isProven = step.key === "proven";
+                            return (
+                                <div key={step.key} className="flex items-center gap-2.5 sm:gap-3.5">
+                                    <step.icon className={`h-3.5 w-3.5 shrink-0 ${isProven && n > 0 ? "text-emerald-500" : "text-slate-600"}`} />
+                                    <span className="w-[68px] shrink-0 truncate text-[12.5px] text-slate-300 sm:w-[92px]">
+                                        {step.label}
+                                    </span>
+                                    <div className="h-5 min-w-0 flex-1 overflow-hidden rounded-sm bg-slate-850/60">
+                                        <div
+                                            className={`h-full rounded-sm transition-all ${isProven ? "bg-emerald-600/80" : "bg-slate-700"}`}
+                                            style={{ width: `${Math.max(pct, n > 0 ? 3 : 0)}%` }}
+                                        />
                                     </div>
-                                </div>
-
-                                {/* Grade Display */}
-                                <div className="flex flex-col items-center justify-center py-4 border-b md:border-b-0 md:border-r border-slate-855">
-                                    <span className="text-[10px] text-slate-500 font-mono uppercase tracking-widest mb-2">Security Grade</span>
-                                    <div className={`text-5xl font-black font-sans leading-none ${
-                                        scanResult.grade.startsWith('A') ? 'text-emerald-500 drop-shadow-[0_0_15px_rgba(16,185,129,0.2)]' :
-                                        scanResult.grade.startsWith('B') || scanResult.grade.startsWith('C') ? 'text-amber-500 drop-shadow-[0_0_15px_rgba(245,158,11,0.2)]' :
-                                        'text-rose-500 drop-shadow-[0_0_15px_rgba(239,68,68,0.2)]'
-                                    }`}>
-                                        {scanResult.grade}
-                                    </div>
-                                    <span className="text-xs text-slate-400 mt-3 font-medium">
-                                        {scanResult.score >= 80 ? 'Strong Protection Standards' :
-                                         scanResult.score >= 50 ? 'Intermediate Security Gaps' :
-                                         'Action Required: Vulnerable Stack'}
+                                    <span className={`tnum w-6 shrink-0 text-right font-mono text-[12px] ${isProven && n > 0 ? "text-emerald-400" : "text-slate-400"}`}>
+                                        {n}
                                     </span>
                                 </div>
-
-                                {/* Summary details */}
-                                <div className="flex flex-col justify-center py-4 px-2 space-y-3">
-                                    <div>
-                                        <span className="text-[10px] text-slate-500 font-mono uppercase tracking-wider block">Audited Server Banner</span>
-                                        <span className="text-xs text-slate-300 font-mono font-bold mt-1 block truncate">{scanResult.server}</span>
-                                    </div>
-                                    <div>
-                                        <span className="text-[10px] text-slate-500 font-mono uppercase tracking-wider block">Runtime Powered-By</span>
-                                        <span className="text-xs text-slate-300 font-mono font-bold mt-1 block truncate">{scanResult.poweredBy}</span>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Audit Cards List */}
-                            <div className="space-y-3">
-                                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 font-mono">Detailed Security Audits</h3>
-                                {scanResult.checks.map((check, idx) => (
-                                    <CheckCard key={idx} check={check} />
-                                ))}
-                            </div>
-                        </div>
+                            );
+                        })}
+                    </div>
+                    {findings.length === 0 && (
+                        <p className="mt-4 text-[12.5px] leading-relaxed text-slate-600">
+                            Every finding earns each rung. The gap between{" "}
+                            <span className="text-slate-400">confirmed</span> and{" "}
+                            <span className="text-slate-400">proven</span> is the part Vultix does.
+                        </p>
                     )}
-                </div>
+                </Card>
 
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                    {/* Left Column: Scan History */}
-                    <div className="lg:col-span-2 space-y-6">
-                        <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800/80">
-                            <h2 className="text-sm font-bold text-white uppercase tracking-wider mb-6 font-mono">Scan History</h2>
-
-                            {scans.length === 0 ? (
-                                <div className="text-center py-16 space-y-4 border border-dashed border-slate-800 rounded-xl bg-slate-950/40">
-                                    <div className="w-10 h-10 rounded-full bg-slate-900 flex items-center justify-center text-slate-500 mx-auto">
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
-                                    </div>
-                                    <div className="space-y-1">
-                                        <h3 className="font-bold text-white text-sm">No scans run yet</h3>
-                                        <p className="text-xs text-slate-500 max-w-xs mx-auto">
-                                            Run an audit above to identify security vulnerabilities and retrieve automated configurations.
-                                        </p>
-                                    </div>
-                                </div>
-                            ) : (
-                                <div className="overflow-x-auto">
-                                    <table className="w-full text-left text-xs border-collapse">
-                                        <thead>
-                                            <tr className="border-b border-slate-800 text-slate-500 uppercase tracking-widest font-mono text-[10px]">
-                                                <th className="pb-3 pl-1">Target URL</th>
-                                                <th className="pb-3 text-center">Grade</th>
-                                                <th className="pb-3 text-center">Score</th>
-                                                <th className="pb-3 text-center">Vulnerabilities</th>
-                                                <th className="pb-3 text-right">Date Audited</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-slate-800/60">
-                                            {scans.map((scan) => (
-                                                <tr key={scan.id} className="hover:bg-slate-950/50 transition-colors">
-                                                    <td className="py-4 pl-1 font-mono font-bold text-slate-350 truncate max-w-[200px]">
-                                                        <button
-                                                            onClick={() => {
-                                                                setSelectedHistoryScan(scan);
-                                                            }}
-                                                            className="text-left font-bold text-slate-350 hover:text-emerald-400 transition-colors cursor-pointer"
-                                                        >
-                                                            {scan.target_url}
-                                                        </button>
-                                                    </td>
-                                                    <td className="py-4 text-center">
-                                                        {scan.status === 'Completed' && scan.grade ? (
-                                                            <span className={`px-2 py-0.5 rounded font-black ${
-                                                                scan.grade.startsWith('A') ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
-                                                                scan.grade.startsWith('B') || scan.grade.startsWith('C') ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' :
-                                                                'bg-rose-500/10 text-rose-400 border border-rose-500/20'
-                                                            }`}>
-                                                                {scan.grade}
-                                                            </span>
-                                                        ) : (
-                                                            <span className="text-slate-650">—</span>
-                                                        )}
-                                                    </td>
-                                                    <td className="py-4 text-center font-bold">
-                                                        {scan.status === 'Completed' && scan.score !== null ? (
-                                                            <span className={scan.score >= 80 ? 'text-emerald-400' : scan.score >= 50 ? 'text-amber-400' : 'text-rose-400'}>
-                                                                {scan.score}
-                                                            </span>
-                                                        ) : (
-                                                            <span className="text-slate-600">—</span>
-                                                        )}
-                                                    </td>
-                                                    <td className="py-4 text-center">
-                                                        {scan.status === 'Completed' ? (
-                                                            <span className={`font-mono px-1.5 py-0.5 rounded text-[10px] ${scan.vulns_found > 0 ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 'bg-emerald-500/10 text-emerald-400'}`}>
-                                                                {scan.vulns_found} issues
-                                                            </span>
-                                                        ) : (
-                                                            <span className="text-rose-500 font-mono text-[10px] bg-rose-500/10 px-1.5 py-0.5 rounded">Failed</span>
-                                                        )}
-                                                    </td>
-                                                    <td className="py-4 text-right text-slate-500 font-mono">
-                                                        {new Date(scan.created_at).toLocaleDateString()}
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* Right Column: Profile & Quota */}
-                    <div className="space-y-6">
-                        {/* Profile Summary Card */}
-                        <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800/80 space-y-6">
-                            <h2 className="text-sm font-bold text-white uppercase tracking-wider font-mono">Profile & Usage</h2>
-                            
-                            {/* Plan Badge */}
-                            <div className="flex justify-between items-center bg-slate-950 p-4 rounded-xl border border-slate-800/60">
-                                <div>
-                                    <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider font-mono">Current Plan</div>
-                                    <div className="text-md font-bold text-white font-mono mt-0.5">{profile?.plan} Tier</div>
-                                </div>
-                                <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${
-                                    profile?.plan === 'Enterprise' ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/25' :
-                                    profile?.plan === 'Pro' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/25' :
-                                    'bg-slate-800 text-slate-350 border border-slate-700'
-                                }`}>
-                                    {profile?.plan}
-                                </span>
-                            </div>
-
-                            {/* Quota Progress */}
-                            <div className="space-y-2">
-                                <div className="flex justify-between text-xs font-medium">
-                                    <span className="text-slate-400">Scan Credits Used</span>
-                                    <span className="text-slate-300 font-mono">{profile?.monthly_scans_used} / {quotaLimit === 9999 ? '∞' : quotaLimit}</span>
-                                </div>
-                                <div className="w-full h-2 rounded-full bg-slate-950 border border-slate-805 overflow-hidden">
-                                    <div 
-                                        className="h-full bg-emerald-500 rounded-full transition-all duration-500 shadow-[0_0_8px_rgba(16,185,129,0.3)]"
-                                        style={{ width: `${quotaPercentage}%` }}
-                                    ></div>
-                                </div>
-                                <p className="text-[10px] text-slate-500 mt-1 leading-relaxed">
-                                    {quotaLimit === 9999 ? 'Unlimited scans active.' : `Resets automatically on ${profile?.quota_reset_date ? new Date(profile.quota_reset_date).toLocaleDateString() : 'N/A'}.`}
-                                </p>
-                            </div>
-
-                            {/* Action Buttons */}
-                            <div className="pt-2">
-                                <Link 
-                                    href="/pricing"
-                                    className="w-full block text-center py-2.5 bg-slate-950 hover:bg-slate-900 border border-slate-800 text-emerald-500 rounded-xl text-xs font-bold transition-all cursor-pointer"
-                                >
-                                    Upgrade Plan Tier
-                                </Link>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </main>
-
-            {selectedHistoryScan && (
-                <ScanDetailModal 
-                    scan={selectedHistoryScan} 
-                    onClose={() => setSelectedHistoryScan(null)} 
-                />
-            )}
-        </div>
-    );
-}
-
-function ScanDetailModal({ scan, onClose }: { scan: ScanRecord; onClose: () => void }) {
-    return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-300">
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-3xl max-h-[85vh] flex flex-col shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
-                {/* Header */}
-                <div className="p-6 border-b border-slate-850 flex items-center justify-between shrink-0 bg-slate-950/40">
-                    <div className="min-w-0">
-                        <div className="flex items-center gap-3 mb-1">
-                            <span className={`text-[10px] font-mono uppercase tracking-widest px-2 py-0.5 rounded border ${
-                                scan.status === 'Completed' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-red-500/10 text-red-400 border-red-500/20'
-                            }`}>
-                                {scan.status}
-                            </span>
-                            <span className="text-[10px] text-slate-500 font-mono">
-                                Date Audited: {new Date(scan.created_at).toLocaleString()}
-                            </span>
-                        </div>
-                        <h2 className="text-lg font-bold text-white truncate max-w-md">{scan.target_url}</h2>
-                    </div>
-                    <button 
-                        onClick={onClose}
-                        className="p-1.5 hover:bg-slate-800 text-slate-400 hover:text-white rounded-lg transition-colors"
-                        title="Close Modal"
-                    >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                    </button>
-                </div>
-
-                {/* Body */}
-                <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                    {scan.status === 'Completed' ? (
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                            <div className="bg-slate-950 border border-slate-800/80 p-4 rounded-xl flex flex-col items-center justify-center text-center">
-                                <span className={`text-3xl font-black ${
-                                    scan.grade?.startsWith('A') ? 'text-emerald-400' :
-                                    scan.grade?.startsWith('B') || scan.grade?.startsWith('C') ? 'text-amber-400' :
-                                    'text-rose-500'
-                                }`}>
-                                    {scan.grade}
-                                </span>
-                                <span className="text-[10px] uppercase tracking-widest text-slate-500 font-bold mt-1">Security Grade</span>
-                            </div>
-                            <div className="bg-slate-950 border border-slate-800/80 p-4 rounded-xl flex flex-col items-center justify-center text-center">
-                                <span className={`text-3xl font-black ${
-                                    scan.score && scan.score >= 80 ? 'text-emerald-400' :
-                                    scan.score && scan.score >= 55 ? 'text-amber-400' :
-                                    'text-rose-500'
-                                }`}>
-                                    {scan.score}%
-                                </span>
-                                <span className="text-[10px] uppercase tracking-widest text-slate-500 font-bold mt-1">Safety Index</span>
-                            </div>
-                            <div className="bg-slate-950 border border-slate-800/80 p-4 rounded-xl flex flex-col items-center justify-center text-center">
-                                <span className={`text-3xl font-black ${scan.vulns_found > 0 ? 'text-rose-450' : 'text-emerald-400'}`}>
-                                    {scan.vulns_found}
-                                </span>
-                                <span className="text-[10px] uppercase tracking-widest text-slate-500 font-bold mt-1">Vulnerabilities</span>
-                            </div>
-                        </div>
+                <Card title="Activity" aside={scans.length > 0 ? String(scans.length) : undefined}>
+                    {scans.length === 0 ? (
+                        <p className="text-[12.5px] leading-relaxed text-slate-600">
+                            Nothing has run yet.
+                        </p>
                     ) : (
-                        <div className="p-5 bg-red-500/10 border border-red-500/20 rounded-xl text-center">
-                            <p className="text-red-400 font-bold text-sm">Scan Execution Failure</p>
-                            <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">{scan.error_message || 'A network connection or handshake timeout occurred.'}</p>
-                        </div>
+                        <ol>
+                            {scans.map((s, i) => {
+                                const done = s.status === "Completed";
+                                const bad = s.status === "Failed";
+                                return (
+                                    <li key={s.id} className="relative flex gap-3 pb-4 last:pb-0">
+                                        {i < scans.length - 1 && (
+                                            <span className="absolute left-[3px] top-3 h-full w-px bg-slate-800" aria-hidden />
+                                        )}
+                                        <span
+                                            className={`relative mt-1.5 h-[7px] w-[7px] shrink-0 rounded-full ${
+                                                bad ? "bg-rose-500" : done ? "bg-slate-600" : "animate-pulse bg-amber-500"
+                                            }`}
+                                            aria-hidden
+                                        />
+                                        <div className="min-w-0 flex-1">
+                                            <p className="truncate text-[12.5px] text-slate-300">{targetName(s.target_id)}</p>
+                                            <p className="mt-0.5 truncate font-mono text-[11px] text-slate-600">
+                                                {bad ? "failed" : done ? `${s.findings_assessed ?? 0} verified` : (s.stage || s.status).toLowerCase()}
+                                                {" · "}{ago(s.created_at)}
+                                            </p>
+                                        </div>
+                                    </li>
+                                );
+                            })}
+                        </ol>
                     )}
-
-                    {/* Detailed audits list */}
-                    <div className="space-y-3">
-                        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 font-mono">Detailed Checks Analysis</h3>
-                        {scan.checks && scan.checks.length > 0 ? (
-                            scan.checks.map((check, idx) => (
-                                <CheckCard key={idx} check={check} />
-                            ))
-                        ) : scan.status === 'Completed' ? (
-                            <div className="text-slate-500 text-xs text-center py-12 border border-dashed border-slate-800 rounded-xl bg-slate-950/20 font-mono">
-                                No raw audit check details were saved for this scan.
-                            </div>
-                        ) : (
-                            <div className="text-slate-500 text-xs text-center py-12 border border-dashed border-slate-800 rounded-xl bg-slate-950/20 font-mono">
-                                Scanner execution failed. No check logs compiled.
-                            </div>
-                        )}
-                    </div>
-
-                    {/* AI-verified findings (per-finding, from the scanner worker) */}
-                    {scan.status === 'Completed' && <FindingsPanel scanId={scan.id} />}
-                </div>
-
-                {/* Footer */}
-                <div className="p-4 border-t border-slate-800 flex justify-end shrink-0 bg-slate-950/40">
-                    <button 
-                        onClick={onClose}
-                        className="px-5 py-2.5 bg-slate-800 hover:bg-slate-750 border border-slate-700 hover:border-slate-600 text-white rounded-xl text-xs font-bold transition-all"
-                    >
-                        Close Details
-                    </button>
-                </div>
-            </div>
-        </div>
-    );
-}
-
-// --- AI-verified findings panel (Phase 1 UI) -------------------------------
-interface FindingRow {
-    id: string;
-    rule_id: string | null;
-    severity: string | null;
-    file_path: string | null;
-    start_line: number | null;
-    message: string | null;
-    reasoning: string | null;
-    unified_diff: string | null;
-    unit_test: string | null;
-    is_vulnerability: boolean;
-    patch_applies: boolean;
-    patch_validated: boolean;
-}
-
-// How far up the ladder a finding climbed. This is the order that matters to
-// someone deciding what to do next: a PROVEN medium is a button, an unverified
-// critical is homework. Severity alone puts the homework first.
-function rung(f: FindingRow): number {
-    if (!f.is_vulnerability) return 0;      // rejected by the AI
-    if (f.patch_validated) return 4;        // test failed before, passed after
-    if (f.patch_applies) return 3;          // applies, but unproven
-    if (f.unified_diff) return 2;           // a patch exists
-    return 1;                               // confirmed, no patch
-}
-
-const SEVERITY_ORDER: Record<string, number> = { error: 3, warning: 2, note: 1 };
-
-function FindingsPanel({ scanId }: { scanId: string }) {
-    const [findings, setFindings] = useState<FindingRow[] | null>(null);
-    const [summary, setSummary] = useState<{ confirmed: number; false_positives: number; patches_validated: number } | null>(null);
-    const [error, setError] = useState<string | null>(null);
-
-    useEffect(() => {
-        let alive = true;
-        (async () => {
-            try {
-                const res = await fetch(`/api/findings?scanId=${encodeURIComponent(scanId)}`);
-                const data = await res.json();
-                if (!res.ok) throw new Error(data.error || "Failed to load findings");
-                if (alive) {
-                    // Rung first, then severity within a rung.
-                    const ordered = [...(data.findings as FindingRow[])].sort(
-                        (a, b) => rung(b) - rung(a)
-                            || (SEVERITY_ORDER[(b.severity || "note").toLowerCase()] ?? 0)
-                             - (SEVERITY_ORDER[(a.severity || "note").toLowerCase()] ?? 0),
-                    );
-                    setFindings(ordered);
-                    setSummary(data.summary);
-                }
-            } catch (e) {
-                if (alive) setError(e instanceof Error ? e.message : String(e));
-            }
-        })();
-        return () => { alive = false; };
-    }, [scanId]);
-
-    return (
-        <div className="space-y-3">
-            <div className="flex items-center justify-between">
-                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider font-mono">AI-Verified Findings</h3>
-                {summary && (
-                    <div className="flex gap-2 text-[10px] font-mono">
-                        <span className="px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-400 border border-rose-500/20">{summary.confirmed} confirmed</span>
-                        <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700">{summary.false_positives} false-positive</span>
-                        <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">{summary.patches_validated} patch verified</span>
-                    </div>
-                )}
+                </Card>
             </div>
 
-            {error && <div className="text-rose-400 text-xs font-mono py-4">{error}</div>}
-            {!findings && !error && <div className="text-slate-500 text-xs font-mono py-8 text-center animate-pulse">Loading findings…</div>}
-            {findings && findings.length === 0 && (
-                <div className="text-slate-500 text-xs text-center py-12 border border-dashed border-slate-800 rounded-xl bg-slate-950/20 font-mono">
-                    No findings recorded for this scan.
+            {/* ---- The targets ------------------------------------------- */}
+            <div className="mt-5">
+                <Card
+                    title="Watching"
+                    aside={targets.length > 0 ? String(targets.length) : undefined}
+                >
+                    <TargetList targets={targets} />
+                </Card>
+            </div>
+
+            {targets.length === 0 && (
+                <div className="mt-5 grid grid-cols-1 gap-5 sm:grid-cols-2">
+                    <StartCard
+                        href="/dashboard/scan/github"
+                        icon={<GitBranch className="h-4 w-4 shrink-0 text-slate-400" />}
+                        title="Scan a repository"
+                        body="Finds leaked secrets, vulnerable dependencies and code flaws, then writes a fix and tests it."
+                        cta="Choose a repository"
+                    />
+                    <StartCard
+                        href="/dashboard/domains"
+                        icon={<Globe className="h-4 w-4 shrink-0 text-slate-400" />}
+                        title="Verify a domain"
+                        body="A site must be proven yours with a DNS record before Vultix will scan it. Verify once, scan any time."
+                        cta={verified > 0 ? "Manage domains" : "Add a domain"}
+                    />
                 </div>
             )}
-            {findings?.map((f) => <FindingCard key={f.id} f={f} />)}
-        </div>
-    );
-}
 
-function FindingCard({ f }: { f: FindingRow }) {
-    const [open, setOpen] = useState(false);
-    const [prState, setPrState] = useState<"idle" | "opening" | "done" | "error">("idle");
-    const [prUrl, setPrUrl] = useState<string | null>(null);
-    const [prError, setPrError] = useState<string | null>(null);
-
-    async function openPullRequest() {
-        setPrState("opening");
-        setPrError(null);
-        try {
-            const res = await csrfFetch("/api/pr", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ findingId: f.id }),
-            });
-            const data = await res.json();
-            if (!res.ok) {
-                // 501 means the deployment has no allowlist configured. That is
-                // a setup step, not a failure of this finding, and the message
-                // has to say so or it reads as "the patch is bad".
-                setPrError(data.error || "Could not open the pull request.");
-                setPrState("error");
-                return;
-            }
-            setPrUrl(data.pr_url || data.url || null);
-            setPrState("done");
-        } catch {
-            setPrError("Could not reach the server.");
-            setPrState("error");
-        }
-    }
-    const sev = (f.severity || "note").toLowerCase();
-    const sevColor = sev === "error" ? "text-rose-400 border-rose-500/20 bg-rose-500/10"
-        : sev === "warning" ? "text-amber-400 border-amber-500/20 bg-amber-500/10"
-        : "text-slate-400 border-slate-700 bg-slate-800";
-    return (
-        <div className={`border rounded-xl overflow-hidden ${f.is_vulnerability ? "border-slate-800" : "border-slate-850 opacity-70"}`}>
-            <button onClick={() => setOpen(!open)} className="w-full flex items-center gap-3 p-3 text-left hover:bg-slate-950/40 transition-colors">
-                <span className={`text-[9px] font-mono uppercase px-1.5 py-0.5 rounded border ${sevColor}`}>{sev}</span>
-                <span className="flex-1 min-w-0">
-                    <span className="text-xs text-white font-mono truncate block">{f.rule_id || "finding"}</span>
-                    <span className="text-[10px] text-slate-500 font-mono truncate block">{f.file_path}{f.start_line ? `:${f.start_line}` : ""}</span>
-                </span>
-                {f.is_vulnerability
-                    ? <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-400 border border-rose-500/20">CONFIRMED</span>
-                    : <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-500 border border-slate-700">FALSE POSITIVE</span>}
-                {f.patch_validated && <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">PATCH VERIFIED</span>}
-                {f.patch_applies && !f.patch_validated && <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">PATCH APPLIES</span>}
-            </button>
-            {open && (
-                <div className="px-3 pb-3 space-y-3 border-t border-slate-850 bg-slate-950/30">
-                    {f.reasoning && <p className="text-[11px] text-slate-400 leading-relaxed pt-3">{f.reasoning}</p>}
-                    {f.unified_diff && (
-                        <div>
-                            <span className="text-[9px] uppercase tracking-widest text-slate-500 font-bold font-mono">Remediation diff</span>
-                            <pre className="mt-1 text-[10px] leading-relaxed bg-slate-950 border border-slate-800 rounded-lg p-3 overflow-x-auto font-mono">
-                                {f.unified_diff.split("\n").map((ln, i) => (
-                                    <div key={i} className={ln.startsWith("+") && !ln.startsWith("+++") ? "text-emerald-400" : ln.startsWith("-") && !ln.startsWith("---") ? "text-rose-400" : "text-slate-400"}>{ln}</div>
-                                ))}
-                            </pre>
-                        </div>
+            {/* ---- Reference --------------------------------------------- */}
+            <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-3">
+                <Card title="Severity">
+                    {sevTotal === 0 ? (
+                        <p className="text-[12.5px] text-slate-600">Nothing confirmed to rank.</p>
+                    ) : (
+                        <>
+                            <div className="flex h-2 overflow-hidden rounded-full bg-slate-850">
+                                {sev.error > 0 && <div className="bg-rose-500" style={{ width: `${(sev.error / sevTotal) * 100}%` }} />}
+                                {sev.warning > 0 && <div className="bg-amber-500" style={{ width: `${(sev.warning / sevTotal) * 100}%` }} />}
+                                {sev.note > 0 && <div className="bg-slate-600" style={{ width: `${(sev.note / sevTotal) * 100}%` }} />}
+                            </div>
+                            <dl className="mt-3.5 space-y-2">
+                                <SevRow colour="bg-rose-500" label="High" n={sev.error} />
+                                <SevRow colour="bg-amber-500" label="Medium" n={sev.warning} />
+                                <SevRow colour="bg-slate-600" label="Low" n={sev.note} />
+                            </dl>
+                        </>
                     )}
+                </Card>
 
-                    {/* The test IS the evidence. `patch_validated` means this
-                        failed before the patch and passed after — the only
-                        sequence that shows the patch changed the outcome.
-                        Summarising it would throw away the proof. */}
-                    {f.unit_test && (
-                        <div>
-                            <span className="text-[9px] uppercase tracking-widest text-slate-500 font-bold font-mono">
-                                {f.patch_validated ? "The test that proves it" : "Generated test (unproven)"}
+                <Card title="Most frequent">
+                    {topRules.length === 0 ? (
+                        <p className="text-[12.5px] leading-relaxed text-slate-600">
+                            The rules that fire most often appear here — usually one mistake repeated.
+                        </p>
+                    ) : (
+                        <ul>
+                            {topRules.map(([rule, n]) => (
+                                <li key={rule} className="flex items-baseline justify-between gap-3 border-b border-slate-800/60 py-2 first:pt-0 last:border-b-0 last:pb-0">
+                                    <span className="min-w-0 truncate font-mono text-[11.5px] text-slate-400">{rule}</span>
+                                    <span className="tnum shrink-0 font-mono text-[11.5px] text-slate-500">{n}&times;</span>
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                </Card>
+
+                <Card title="Coverage">
+                    <div className="flex flex-wrap gap-1.5">
+                        {["Semgrep", "Gitleaks", "osv-scanner", "nuclei"].map((name) => (
+                            <span
+                                key={name}
+                                className="rounded border border-slate-800 bg-slate-850/60 px-2 py-1 font-mono text-[10.5px] text-slate-400"
+                            >
+                                {name}
                             </span>
-                            <pre className="mt-1 text-[10px] leading-relaxed bg-slate-950 border border-slate-800 rounded-lg p-3 overflow-x-auto font-mono text-slate-400">
-                                {f.unit_test}
-                            </pre>
-                        </div>
-                    )}
+                        ))}
+                    </div>
+                    <p className="mt-3.5 text-[12px] leading-relaxed text-slate-600">
+                        An AI reviewer then discards what it cannot justify.
+                        {hoursSaved > 0 && (
+                            <span className="text-slate-400">
+                                {" "}Proven fixes so far are about {hoursSaved.toFixed(hoursSaved < 10 ? 1 : 0)} hours of work.
+                            </span>
+                        )}
+                    </p>
+                </Card>
+            </div>
+        </div>
+    );
+}
 
-                    {f.unified_diff && f.is_vulnerability && (
-                        <div className="pt-1">
-                            {prState === "done" && prUrl ? (
-                                <a href={prUrl} target="_blank" rel="noopener noreferrer"
-                                   className="inline-flex items-center gap-2 text-[11px] font-bold px-3 py-2 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 hover:bg-emerald-500/15">
-                                    Pull request opened — view on GitHub ↗
-                                </a>
-                            ) : (
-                                <button
-                                    type="button"
-                                    onClick={openPullRequest}
-                                    disabled={prState === "opening"}
-                                    className={`inline-flex items-center gap-2 text-[11px] font-bold px-3 py-2 rounded-lg border transition-colors disabled:opacity-50 ${
-                                        f.patch_validated
-                                            ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/25 hover:bg-emerald-500/15"
-                                            : "bg-slate-800/60 text-slate-300 border-slate-700 hover:bg-slate-800"
-                                    }`}
-                                >
-                                    {prState === "opening" ? "Opening pull request…" : "Open pull request"}
-                                </button>
-                            )}
-                            {!f.patch_validated && prState === "idle" && (
-                                <p className="text-[10px] text-amber-400/80 mt-2 font-mono">
-                                    This patch has not been proven by a test. Review the diff before merging.
-                                </p>
-                            )}
-                            {prState === "error" && prError && (
-                                <p className="text-[10px] text-rose-400 mt-2 leading-relaxed">{prError}</p>
-                            )}
-                        </div>
-                    )}
+function SevRow({ colour, label, n }: { colour: string; label: string; n: number }) {
+    return (
+        <div className="flex items-baseline justify-between gap-3">
+            <dt className="flex min-w-0 items-center gap-2 truncate text-[12.5px] text-slate-400">
+                <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${n > 0 ? colour : "bg-slate-800"}`} aria-hidden />
+                {label}
+            </dt>
+            <dd className={`tnum shrink-0 font-mono text-[12px] ${n > 0 ? "text-slate-300" : "text-slate-700"}`}>{n}</dd>
+        </div>
+    );
+}
+
+/**
+ * One figure in the strip. Deliberately NOT its own card — the panel around
+ * the whole strip is the object and these are its columns, which is why the
+ * dividers are borders on the cells rather than a ring on each.
+ */
+function Stat({
+    label, value, suffix, note, tone, href, meter,
+}: {
+    label: string;
+    value: number;
+    suffix?: string;
+    note: string;
+    tone: "emerald" | "amber" | "plain" | "muted";
+    href?: string;
+    meter?: number;
+}) {
+    const colour =
+        tone === "emerald" ? "text-emerald-400"
+        : tone === "amber" ? "text-amber-400"
+        : tone === "muted" ? "text-slate-600"
+        : "text-white";
+
+    const body = (
+        <>
+            <div className="flex items-baseline justify-between gap-1.5">
+                <span className="min-w-0 truncate font-mono text-[9.5px] uppercase tracking-[0.14em] text-slate-500">
+                    {label}
+                </span>
+                {href && <ArrowRight className="h-3 w-3 shrink-0 text-slate-700 transition-colors group-hover:text-slate-400" />}
+            </div>
+            <div className={`tnum mt-2 truncate text-[22px] font-semibold leading-none tracking-[-0.02em] sm:text-[24px] ${colour}`}>
+                {value}
+                {suffix && <span className="ml-1 text-[12px] font-normal text-slate-600">{suffix}</span>}
+            </div>
+            <div className="mt-1.5 truncate text-[11.5px] text-slate-500">{note}</div>
+            {meter !== undefined && (
+                <div className="mt-2.5 h-0.5 w-full overflow-hidden rounded-full bg-slate-850">
+                    <div
+                        className={`h-full rounded-full ${meter >= 80 ? "bg-amber-500" : "bg-slate-500"}`}
+                        style={{ width: `${Math.max(meter, 2)}%` }}
+                    />
                 </div>
             )}
-        </div>
+        </>
+    );
+
+    // Borders on the cell, so a 2-up phone grid and a 4-up desktop row both
+    // divide cleanly without a stray edge on the outside.
+    const cls =
+        "group block min-w-0 border-b border-slate-800/70 p-3.5 sm:border-b-0 sm:border-r sm:p-4 " +
+        "[&:nth-child(even)]:border-l [&:nth-child(even)]:border-l-slate-800/70 " +
+        "sm:[&:nth-child(even)]:border-l-0 sm:last:border-r-0 [&:nth-last-child(-n+2)]:border-b-0";
+
+    return href ? (
+        <Link href={href} className={`${cls} transition-colors hover:bg-slate-850/40`}>{body}</Link>
+    ) : (
+        <div className={cls}>{body}</div>
+    );
+}
+
+function StartCard({
+    href, icon, title, body, cta,
+}: {
+    href: string;
+    icon: React.ReactNode;
+    title: string;
+    body: string;
+    cta: string;
+}) {
+    return (
+        <Link
+            href={href}
+            className="group min-w-0 rounded-lg border border-slate-800/70 bg-ink-800 p-4 transition-colors hover:border-slate-700 hover:bg-ink-700 sm:p-5"
+        >
+            <div className="flex items-center gap-2.5">
+                {icon}
+                <span className="min-w-0 truncate text-[13.5px] font-medium text-slate-100">{title}</span>
+            </div>
+            <p className="mt-2.5 text-[12.5px] leading-relaxed text-slate-500">{body}</p>
+            <span className="mt-3.5 inline-flex items-center gap-1.5 font-mono text-[11px] text-slate-400 transition-colors group-hover:text-white">
+                {cta}
+                <ArrowRight className="h-3 w-3 shrink-0" />
+            </span>
+        </Link>
     );
 }

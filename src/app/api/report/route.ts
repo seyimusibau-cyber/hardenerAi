@@ -17,12 +17,28 @@ export async function GET(request: Request) {
     const { data: findings } = await supabase.from('findings').select('*')
         .eq('scan_id', scanId).order('is_vulnerability', { ascending: false });
 
-    const esc = (s: unknown) => String(s ?? '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c] as string));
+    // Escapes the FIVE characters that matter, not three. The previous version
+    // handled & < > only, which is enough for text but not for an attribute:
+    // `class="sev ${esc(severity)}"` with a quote in `severity` closes the
+    // attribute and opens an event handler. No tag is needed, and the app's CSP
+    // allows 'unsafe-inline', so a handler would run — same-origin, next to a
+    // deliberately readable CSRF cookie.
+    const esc = (s: unknown) =>
+        String(s ?? '').replace(/[&<>"']/g, c => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+        }[c] as string));
+
+    // Defence in depth for the one value that lands in an attribute: a class
+    // name comes from a fixed set or it does not get used at all.
+    const sevClass = (v: unknown) => {
+        const k = String(v ?? '').toLowerCase();
+        return k === 'error' || k === 'warning' || k === 'note' ? k : 'note';
+    };
     const confirmed = (findings ?? []).filter(f => f.is_vulnerability);
     const rows = (findings ?? []).map(f => `
         <div class="finding ${f.is_vulnerability ? 'vuln' : 'fp'}">
           <div class="fhead">
-            <span class="sev ${esc(f.severity)}">${esc(f.severity)}</span>
+            <span class="sev ${sevClass(f.severity)}">${esc(f.severity)}</span>
             <code>${esc(f.rule_id)}</code>
             <span class="loc">${esc(f.file_path)}${f.start_line ? ':' + f.start_line : ''}</span>
             ${f.patch_validated ? '<span class="badge ok">patch verified</span>' : f.patch_applies ? '<span class="badge warn">patch applies</span>' : ''}

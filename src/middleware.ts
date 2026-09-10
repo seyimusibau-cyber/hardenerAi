@@ -19,7 +19,24 @@ export async function middleware(request: NextRequest) {
         // /api/scan stays public: the landing page's header check (GET) is for
         // signed-out visitors. The POST branch does its own getUser() and
         // returns 401 without a session, so the pipeline is not exposed.
+        // The GET branch is rate limited and SSRF-checked in the route.
         '/api/scan',
+        // Webhooks are machine-to-machine. They CANNOT hold a browser session,
+        // so validateSession() below rejected all four with 401 before their
+        // own checks ever ran — Stripe would complete a checkout and the plan
+        // would never upgrade. CSRF is equally meaningless here: there is no
+        // browser and no ambient cookie to abuse.
+        //
+        // Each of these authenticates its SENDER instead, and fails closed:
+        //   stripe   — stripe.webhooks.constructEvent(raw, sig, secret)
+        //   qstash   — Receiver.verify({ signature, body })
+        //   schedule — Receiver.verify({ signature, body })
+        //   notify   — timing-safe compare against NOTIFY_SECRET
+        // Do not add a route here unless it verifies its sender itself.
+        '/api/webhooks/stripe',
+        '/api/webhooks/qstash',
+        '/api/webhooks/schedule',
+        '/api/webhooks/notify',
     ]
     const isPublicRoute = publicRoutes.some(route => 
         request.nextUrl.pathname === route || 

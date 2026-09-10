@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'crypto';
 import { handleError } from '@/lib/error-handler';
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
@@ -8,12 +9,38 @@ const supabaseAdmin = createClient(
     process.env.SUPABASE_SERVICE_ROLE_KEY || ''
 );
 
+/**
+ * Constant-time secret comparison.
+ *
+ * `a !== b` on strings returns as soon as two bytes differ, which leaks the
+ * length and a byte-by-byte oracle to anyone who can time the response. This
+ * route is exempt from the session check in middleware, so this comparison is
+ * the ONLY thing standing in front of a service-role Supabase client.
+ */
+function secretMatches(presented: string | null): boolean {
+    const expected = process.env.NOTIFY_SECRET;
+    // An unset secret must refuse everything. Comparing against '' or
+    // undefined would let a caller in by sending nothing at all.
+    if (!expected || !presented) return false;
+
+    const a = Buffer.from(presented);
+    const b = Buffer.from(expected);
+    // timingSafeEqual throws on a length mismatch, which is itself an oracle;
+    // hash both sides to a fixed width first.
+    if (a.length !== b.length) {
+        // Still burn a comparison so the "wrong length" path is not the fast one.
+        timingSafeEqual(b, b);
+        return false;
+    }
+    return timingSafeEqual(a, b);
+}
+
 // Called by the scanner worker when a scan finishes. Shared-secret auth (the
 // worker is trusted infra, not a browser). Sends alerts for any active schedule
 // that matches this scan's target.
 export async function POST(req: Request) {
     try {
-        if (req.headers.get('x-vultix-secret') !== process.env.NOTIFY_SECRET) {
+        if (!secretMatches(req.headers.get('x-vultix-secret'))) {
             return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
         }
         const { scanId } = await req.json();

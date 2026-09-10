@@ -1,12 +1,67 @@
 @import "tailwindcss";
 
+/**
+ * Design tokens.
+ *
+ * Three of these exist because the dashboard was already *using* them and they
+ * had never been defined — `bg-slate-850`, `border-slate-750` and
+ * `no-scrollbar` all silently rendered as nothing. Tailwind v4 has no config
+ * file here, so the theme lives in CSS.
+ */
+@theme {
+    --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font-mono: var(--font-jetbrains), ui-monospace, "SF Mono", Menlo, monospace;
+
+    /* The two rungs Tailwind leaves out between 800 and 900. Used for the
+       inset chips and hairlines that need to sit *just* off the panel. */
+    --color-slate-750: #2a3646;
+    --color-slate-850: #172033;
+
+    /* The dashboard ground. Cooler and darker than slate-950 so the panels
+       sitting on it read as raised without needing a shadow. */
+    --color-ink-900: #060A11;
+    --color-ink-800: #0A0F18;
+    --color-ink-700: #0E1522;
+}
+
+html,
 body {
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    /* Backstop, not a fix. Every horizontal run in the app is built to wrap,
+       truncate or carry min-w-0; this only stops one future mistake turning
+       into a page that slides sideways on a phone. */
+    overflow-x: hidden;
+    max-width: 100%;
+}
+
+/* Horizontal nav strips scroll on mobile; the bar itself is visual noise. */
+.no-scrollbar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+    display: none;
+}
+
+/* Digits that sit in columns — quotas, counts, scores — must not dance as
+   they change. */
+.tnum {
+    font-variant-numeric: tabular-nums;
 }
 
 .progress-ring__circle {
     transition: stroke-dashoffset 0.35s;
     transform: rotate(-90deg);
     transform-origin: 50% 50%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
 }

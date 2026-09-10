@@ -4,6 +4,7 @@ import { createClient } from '@/utils/supabase/server';
 import { createClient as createServiceClient } from '@supabase/supabase-js';
 import { rateLimit } from '@/lib/rate-limiter';
 import { UrlSchema } from '@/lib/sanitization';
+import { safeFetch } from '@/lib/ssrf-protection';
 import { classifyTarget, parseGitHubRepo, repoCloneUrl } from '@/lib/target';
 import { Client } from '@upstash/qstash';
 
@@ -137,9 +138,40 @@ export async function POST(request: Request) {
             }, { status: 429 });
         }
 
-        // 3. Queue the Scan
-        const { data: scan, error: scanError } = await supabase.from('scans').insert({
+        // 3. Resolve the target, then queue the scan against it.
+        //
+        // A target is the thing the user cares about — a repository or a site —
+        // and a scan is one event in its history. `mode` is stamped here from
+        // classifyTarget rather than re-derived on read, so a scan keeps the
+        // classification it actually ran under.
+        //
+        // Both writes use the service role: 006 and 007 made `scans` and
+        // `targets` server-owned, so a browser session cannot insert either.
+        const admin = createServiceClient(
+            process.env.NEXT_PUBLIC_SUPABASE_URL!,
+            process.env.SUPABASE_SERVICE_ROLE_KEY!,
+            { auth: { persistSession: false } },
+        );
+
+        const { data: target, error: targetError } = await admin
+            .from('targets')
+            .upsert(
+                {
+                    user_id: user.id,
+                    target_url: scanTarget,
+                    mode: targetType,
+                    last_scanned_at: new Date().toISOString(),
+                },
+                { onConflict: 'user_id,target_url' },
+            )
+            .select()
+            .single();
+
+        if (targetError) throw targetError;
+
+        const { data: scan, error: scanError } = await admin.from('scans').insert({
             user_id: user.id,
+            target_id: target.id,
             // Canonical form, so the worker clones what we parsed rather
             // than what the user typed.
             target_url: scanTarget,
@@ -157,11 +189,6 @@ export async function POST(request: Request) {
         // `monthly_scans_used` is now server-owned by the same rule that closed
         // that hole — a quota a client can rewrite is not a quota.
         if (profile?.role !== 'admin') {
-            const admin = createServiceClient(
-                process.env.NEXT_PUBLIC_SUPABASE_URL!,
-                process.env.SUPABASE_SERVICE_ROLE_KEY!,
-                { auth: { persistSession: false } },
-            );
             const { error: quotaError } = await admin
                 .from('profiles')
                 .update({ monthly_scans_used: used + 1 })
@@ -196,8 +223,20 @@ export async function POST(request: Request) {
     }
 }
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
     try {
+        // This branch is PUBLIC (see middleware publicRoutes) — the landing
+        // page runs it for signed-out visitors. Public plus "fetches a URL you
+        // supply" is the exact shape of an open proxy, so it needs both a rate
+        // limit and an SSRF policy. It previously had neither: rateLimit() was
+        // imported but only ever called from POST.
+        const ip =
+            request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+            request.headers.get('x-real-ip') ||
+            'unknown';
+        const limited = await rateLimit(request, `header-audit:ip:${ip}`, 10, 60 * 1000);
+        if (limited) return limited;
+
         const { searchParams } = new URL(request.url);
         const rawUrl = searchParams.get('url');
 
@@ -222,22 +261,33 @@ export async function GET(request: Request) {
         let xfoHeader: string | null = null;
         let xctoHeader: string | null = null;
 
-        try {
-            const fetchRes = await fetch(targetUrl, {
-                method: 'GET',
-                redirect: 'follow',
-                headers: { 'User-Agent': 'Vultix-Audit/1.0' },
-                signal: AbortSignal.timeout(4000),
-            });
+        // safeFetch re-validates every redirect hop before requesting it.
+        // `redirect: 'follow'` cannot be audited — by the time a Response
+        // exists, each hop has already been fetched.
+        const probe = await safeFetch(targetUrl, {
+            method: 'GET',
+            headers: { 'User-Agent': 'Vultix-Audit/1.0' },
+            signal: AbortSignal.timeout(4000),
+        });
 
+        if (!probe.ok) {
+            // Refusals are reported as a refusal, not as a target with no
+            // headers — an F grade for 127.0.0.1 would be a lie about a host
+            // we never audited.
+            return NextResponse.json(
+                { error: 'That address cannot be audited.', reason: probe.reason },
+                { status: 400 },
+            );
+        }
+
+        {
+            const fetchRes = probe.response;
             serverHeader = fetchRes.headers.get('server') || 'Undetected';
             poweredByHeader = fetchRes.headers.get('x-powered-by') || 'Undetected';
             cspHeader = fetchRes.headers.get('content-security-policy');
             hstsHeader = fetchRes.headers.get('strict-transport-security');
             xfoHeader = fetchRes.headers.get('x-frame-options');
             xctoHeader = fetchRes.headers.get('x-content-type-options');
-        } catch {
-            // Fallback default headers evaluation if target blocks HEAD/GET
         }
 
         const checks = [

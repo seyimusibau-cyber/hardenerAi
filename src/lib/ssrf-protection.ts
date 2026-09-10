@@ -289,3 +289,68 @@ export function getSafeHostname(url: string): string {
         return 'invalid-url';
     }
 }
+
+// ============================================================================
+// Safe outbound fetch
+// ============================================================================
+/**
+ * Fetch a user-supplied URL with SSRF checks that survive redirects.
+ *
+ * `validateUrlSafety()` alone is not enough for a real request. It walks the
+ * redirect chain, and then the caller issues its OWN fetch — so a host that
+ * answers the probe honestly and the real request differently (DNS rebinding,
+ * or simply a 302 emitted only the second time) walks straight past the check.
+ * The native `redirect: 'follow'` cannot be audited at all: by the time a
+ * Response comes back, every hop has already been requested.
+ *
+ * So redirects are followed MANUALLY here, and every hop is re-validated
+ * before it is requested.
+ */
+export async function safeFetch(
+    rawUrl: string,
+    init: RequestInit = {},
+    maxRedirects: number = MAX_REDIRECTS,
+): Promise<{ ok: true; response: Response; finalUrl: string } | { ok: false; reason: string }> {
+    let current = rawUrl;
+
+    for (let hop = 0; hop <= maxRedirects; hop++) {
+        const check = await validateUrlSafety(current);
+        if (!check.safe) {
+            return { ok: false, reason: check.reason || 'Blocked by SSRF policy' };
+        }
+
+        let response: Response;
+        try {
+            response = await fetch(current, {
+                ...init,
+                redirect: 'manual', // never let the runtime follow one unchecked
+                signal: init.signal ?? AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+            });
+        } catch (err) {
+            return { ok: false, reason: err instanceof Error ? err.message : 'Request failed' };
+        }
+
+        const isRedirect = response.status >= 300 && response.status < 400;
+        const location = response.headers.get('location');
+        if (!isRedirect || !location) {
+            return { ok: true, response, finalUrl: current };
+        }
+
+        // Resolve relative Location values against the hop we just made.
+        let next: string;
+        try {
+            next = new URL(location, current).toString();
+        } catch {
+            return { ok: false, reason: 'Malformed redirect target' };
+        }
+
+        // Only http(s). A redirect to file:// or gopher:// is a classic escape.
+        const proto = new URL(next).protocol;
+        if (proto !== 'http:' && proto !== 'https:') {
+            return { ok: false, reason: `Blocked redirect scheme: ${proto}` };
+        }
+        current = next;
+    }
+
+    return { ok: false, reason: 'Too many redirects' };
+}
